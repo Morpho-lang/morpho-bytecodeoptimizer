@@ -4,11 +4,12 @@
  *  @brief Basic blocks
 */
 
-#include "optimize.h"
+#include "block.h"
+
+DEFINE_VARRAY(block, block)
 
 /** Initializes a basic block structure */
 void block_init(block *b) {
-    
 }
 
 /** Clears a basic block structure */

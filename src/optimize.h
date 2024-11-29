@@ -8,9 +8,9 @@
 #define optimize_h
 
 #define MORPHO_CORE
-#include "core.h"
-#include "compile.h"
-#include "morpho.h"
+#include <morpho/core.h>
+#include <morpho/compile.h>
+#include <morpho.h>
 
 void bytecodeoptimizer_initialize(void);
 
