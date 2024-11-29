@@ -4,9 +4,18 @@
  *  @brief Optimizer for compiled morpho bytecode
 */
 
-#include <morpho/morpho.h>
 #include "optimize.h"
 
+/** Public interface to optimizer */
+bool optimize(program *in) {
+    printf("Optimizing\n");
+    return true;
+}
+
+/* **********************************************************************
+ * Initialization/Finalization
+ * ********************************************************************** */
+
 void bytecodeoptimizer_initialize(void) {
-    printf("Optimizer loaded\n");
+    morpho_setoptimizer(optimize);
 }
