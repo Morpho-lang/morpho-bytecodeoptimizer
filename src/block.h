@@ -9,6 +9,8 @@
 
 #include "optimize.h"
 
+#define INSTRUCTIONINDX_EMPTY -1
+
 typedef struct sblock {
     instructionindx start; /** First instruction in the block */
     instructionindx end; /** Last instruction in the block */
