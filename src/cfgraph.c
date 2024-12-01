@@ -134,6 +134,12 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     }
 }
 
+/** Adds a function to the control flow graph */
+void cfgraphbuilder_addfunction(cfgraphbuilder *bld, value func) {
+    if (!MORPHO_ISFUNCTION(func)) return;
+    cfgraphbuilder_push(bld, MORPHO_GETFUNCTION(func)->entry);
+}
+
 /** Creates a new basic block starting at a given instruction */
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
@@ -175,7 +181,7 @@ void cfgraph_build(program *in, cfgraph *out) {
     
     cfgraphbuilder_init(&bld, in, out);
     
-    cfgraphbuilder_branchto(&bld, 0);
+    cfgraphbuilder_addfunction(&bld, MORPHO_OBJECT(in->global));
     
     instructionindx item;
     while (cfgraphbuilder_pop(&bld, &item)) {
