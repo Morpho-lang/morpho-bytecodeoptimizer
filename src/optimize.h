@@ -12,8 +12,6 @@
 #include <morpho/compile.h>
 #include <morpho.h>
 
-DECLARE_VARRAY(instructionindx, instructionindx)
-
 void bytecodeoptimizer_initialize(void);
 
 #endif

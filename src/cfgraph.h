@@ -4,10 +4,16 @@
  *  @brief Basic blocks
 */
 
-#ifndef block_h
-#define block_h
+#ifndef cfgraph_h
+#define cfgraph_h
 
 #include "optimize.h"
+
+DECLARE_VARRAY(instructionindx, instructionindx)
+
+/* **********************************************************************
+ * Basic block data structure
+ * ********************************************************************** */
 
 #define INSTRUCTIONINDX_EMPTY -1
 
@@ -16,9 +22,25 @@ typedef struct sblock {
     instructionindx end; /** Last instruction in the block */
 } block;
 
-DECLARE_VARRAY(block, block)
+/* **********************************************************************
+ * Control flow graph
+ * ********************************************************************** */
+
+DECLARE_VARRAY(block, block);
+
+typedef varray_block cfgraph; 
+
+/* **********************************************************************
+ * Interface
+ * ********************************************************************** */
 
 void block_init(block *b);
 void block_clear(block *b);
+
+void cfgraph_init(cfgraph *graph);
+void cfgraph_clear(cfgraph *graph);
+void cfgraph_show(cfgraph *graph);
+
+void cfgraph_build(program *in, cfgraph *out);
 
 #endif
