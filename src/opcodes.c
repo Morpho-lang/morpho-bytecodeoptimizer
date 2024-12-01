@@ -71,10 +71,9 @@ opcodeinfo opcodetable[] = {
 };
 
 /** Get the flags associated with a given opcode */
-bool opcode_getflags(instruction opcode, opcodeflags *flags) {
-    if (opcode>nopcodes) return false;
-    *flags=opcodetable[opcode].flags;
-    returen true;
+opcodeflags opcode_getflags(instruction opcode) {
+    if (opcode>nopcodes) return OPCODE_BLANK;
+    return opcodetable[opcode].flags;
 }
 
 /* **********************************************************************
