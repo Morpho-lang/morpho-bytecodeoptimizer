@@ -5,6 +5,7 @@
 */
 
 #include "cfgraph.h"
+#include "opcodes.h"
 
 DEFINE_VARRAY(instructionindx, instructionindx)
 DEFINE_VARRAY(block, block)
@@ -149,27 +150,22 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     for (instructionindx i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
         
-        switch (DECODE_OP(instr)) { // Check for block-terminating instructions
-            default: continue;
-            case OP_BIF: // Conditional branches generate a block immediately after
-            case OP_BIFF:
-                cfgraphbuilder_branchto(bld, i+1);
-                // Fallthrough to also generate block at branch target
-            case OP_B:
-            case OP_POPERR:
-            {
-                int branchby = DECODE_sBx(instr);
-                cfgraphbuilder_branchto(bld, i+1+branchby);
-            }
-                break;
-            case OP_PUSHERR:
-            case OP_RETURN:
-            case OP_END:
-                break;
-        }
+        opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
-        blk.end=i;
-        break;
+        // Conditional branches generate a block immediately afterwards
+        if (flags & OPCODE_CONDITIONAL) cfgraphbuilder_branchto(bld, i+1);
+        
+        // Branches generate a block at the branch target
+        if (flags & OPCODE_BRANCH) {
+            int branchby = DECODE_sBx(instr);
+            cfgraphbuilder_branchto(bld, i+1+branchby);
+        }
+
+        // At a block ending instruction record the end point and terminate
+        if (flags & OPCODE_ENDSBLOCK) {
+            blk.end=i;
+            break;
+        }
     }
     
     cfgraph_addblock(bld->out, &blk);
