@@ -1,5 +1,5 @@
 target_sources(bytecodeoptimizer
     PRIVATE
-        block.c      block.h 
+        cfgraph.c    cfgraph.h 
         optimize.c   optimize.h  
 )
