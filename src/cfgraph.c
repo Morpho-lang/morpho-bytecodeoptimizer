@@ -112,6 +112,14 @@ instruction cfgraphbuilder_fetch(cfgraphbuilder *bld, instructionindx i) {
     return bld->in->code.data[i];
 }
 
+/** Splits a block at instruction 'split' */
+void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split) {
+    if (blk->start==split) return; // No need to split
+    
+    blk->end=split-1; // Update the end of this block
+    cfgraphbuilder_push(bld, split);
+}
+
 /** Processes a branch instruction.
  * @details Finds whether the branch points to or wthin an existing block and either splits it as necessary or creates a new block
  * @param[in] opt - optimizer
@@ -120,7 +128,7 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     block *old;
         
     if (cfgraph_find(bld->out, start, &old)) {
-        //optimize_splitblock(opt, destblock, dest);
+        cfgraphbuilder_split(bld, old, start);
     } else {
         cfgraphbuilder_push(bld, start);
     }
