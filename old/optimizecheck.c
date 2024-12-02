@@ -8,83 +8,9 @@
 #include "debug.h"
 #include "vm.h"
 
-DEFINE_VARRAY(codeblock, codeblock);
-DEFINE_VARRAY(codeblockindx, codeblockindx);
-
 /* **********************************************************************
  * Data structures
  * ********************************************************************** */
-
-/* -----------
- * Code blocks
- * ----------- */
-
-/** Initialize a code block */
-void optimize_initcodeblock(codeblock *block, objectfunction *func, instructionindx start) {
-    block->start=start;
-    block->end=start;
-    block->inbound=0;
-    block->dest[0]=CODEBLOCKDEST_EMPTY;
-    block->dest[1]=CODEBLOCKDEST_EMPTY;
-    varray_codeblockindxinit(&block->src);
-    dictionary_init(&block->retain);
-    block->visited=0;
-    block->nreg=0;
-    block->reg=NULL;
-    block->ostart=0;
-    block->oend=0;
-    block->func=func;
-    block->isroot=false;
-}
-
-/** Clear a code block */
-void optimize_clearcodeblock(codeblock *block) {
-    varray_codeblockindxclear(&block->src);
-    dictionary_clear(&block->retain);
-}
-
-/** Sets the current block */
-void optimize_setcurrentblock(optimizer *opt, codeblockindx handle) {
-    opt->currentblock=handle;
-}
-
-/** Gets the current block */
-codeblockindx optimize_getcurrentblock(optimizer *opt) {
-    return opt->currentblock;
-}
-
-/** Gets the code block from the handle */
-codeblock *optimize_getblock(optimizer *opt, codeblockindx handle) {
-    return &opt->cfgraph.data[handle];
-}
-
-/** Indicate that register `reg` in block `handle` is used by a subsequent block */
-void optimize_retain(optimizer *opt, codeblockindx handle, registerindx reg) {
-    codeblock *block=optimize_getblock(opt, handle);
-    dictionary_insert(&block->retain, MORPHO_INTEGER(reg), MORPHO_TRUE);
-}
-
-/** Check if a register  `reg` in block `handle` has been marked as retained */
-bool optimize_isretained(optimizer *opt, codeblockindx handle, registerindx reg) {
-    value val;
-    codeblock *block=optimize_getblock(opt, handle);
-    return dictionary_get(&block->retain, MORPHO_INTEGER(reg), &val);
-}
-
-/** Marks reg as retained in parents of the current code block */
-void optimize_retaininparents(optimizer *opt, registerindx reg) {
-    codeblock *block=optimize_getblock(opt, optimize_getcurrentblock(opt));
-    for (unsigned int i=0; i<block->src.count; i++) {
-        codeblockindx dest = block->src.data[i];
-        if (dest!=CODEBLOCKDEST_EMPTY) optimize_retain(opt, dest, reg);
-    }
-    
-    codeblockindx dest=opt->reg[reg].block;
-    
-    if (dest!=CODEBLOCKDEST_EMPTY) {
-        optimize_retain(opt, dest, reg);
-    }
-}
 
 /* -----------
  * Globals
@@ -284,12 +210,6 @@ void optimize_regshow(optimizer *opt) {
  * Instructions
  * ------------ */
 
-/** Fetches an instruction at a given indx */
-instruction optimize_fetchinstructionat(optimizer *opt, indx ix) {
-    if (ix==INSTRUCTIONINDX_EMPTY) UNREACHABLE("Trying to fetch an undefined instruction.");
-    return opt->out->code.data[ix];
-}
-
 /** Replaces an instruction at a given indx */
 void optimize_replaceinstructionat(optimizer *opt, instructionindx ix, instruction inst) {
     instruction old = opt->out->code.data[ix];
@@ -303,13 +223,6 @@ void optimize_replaceinstructionat(optimizer *opt, instructionindx ix, instructi
         opt->nchanged+=1;
         opt->out->code.data[ix]=inst;
     }
-}
-
-/** Replaces the current instruction */
-void optimize_replaceinstruction(optimizer *opt, instruction inst) {
-    optimize_replaceinstructionat(opt, opt->iindx, inst);
-    opt->current=inst;
-    opt->op=DECODE_OP(inst);
 }
 
 /* ------------
@@ -353,94 +266,6 @@ bool optimize_addconstant(optimizer *opt, value val, indx *out) {
     }
     
     return true;
-}
-
-/* **********************************************************************
-* Optimizer data structure
-* ********************************************************************** */
-
-/** Restart from a designated instruction */
-void optimize_restart(optimizer *opt, instructionindx start) {
-    optimize_regclear(opt);
-    opt->iindx=start;
-}
-
-/** Checks if we're at the end of the program */
-bool optimize_atend(optimizer *opt) {
-    return (opt->iindx >= opt->out->code.count);
-}
-
-/** Sets the current function */
-void optimize_setfunction(optimizer *opt, objectfunction *func) {
-    opt->maxreg=func->nregs;
-    opt->func=func;
-}
-
-/** Indicates no overwrite takes place */
-static inline void optimize_nooverwrite(optimizer *opt) {
-    opt->overwrites=REGISTER_UNALLOCATED;
-}
-
-/** Fetches the instruction  */
-void optimize_fetch(optimizer *opt) {
-    optimize_nooverwrite(opt);
-    if (opt->iindx>=opt->out->code.count) return; 
-    
-    opt->current=opt->out->code.data[opt->iindx];
-    opt->op=DECODE_OP(opt->current);
-}
-
-/** Returns the index of the instruction currently decoded */
-instructionindx optimizer_currentindx(optimizer *opt) {
-    return opt->iindx;
-}
-
-/** Advance to next instruction */
-void optimize_advance(optimizer *opt) {
-    opt->iindx++;
-}
-
-/** Move to a different instruction. Does not move annotations */
-void optimize_moveto(optimizer *opt, instructionindx indx) {
-    opt->iindx=indx;
-    optimize_fetch(opt);
-}
-
-void optimize_restartannotation(optimizer *opt);
-
-
-/** Initializes optimizer data structure */
-void optimize_init(optimizer *opt, program *prog) {
-    opt->out=prog;
-    opt->globals=MORPHO_MALLOC(sizeof(globalinfo)*(opt->out->nglobals+1));
-    optimize_initglobals(opt);
-    opt->maxreg=MORPHO_MAXARGS;
-    optimize_setfunction(opt, prog->global);
-    optimize_restart(opt, 0);
-    
-    dictionary_init(&opt->functions);
-    varray_codeblockinit(&opt->cfgraph);
-    varray_debugannotationinit(&opt->aout);
-    optimize_restartannotation(opt);
-    
-    opt->v=morpho_newvm();
-    opt->temp=morpho_newprogram();
-}
-
-/** Clears optimizer data structure */
-void optimize_clear(optimizer *opt) {
-    if (opt->globals) MORPHO_FREE(opt->globals);
-    
-    for (int i=0; i<opt->cfgraph.count; i++) {
-        optimize_clearcodeblock(opt->cfgraph.data+i);
-    }
-    
-    dictionary_clear(&opt->functions);
-    varray_codeblockclear(&opt->cfgraph);
-    varray_debugannotationclear(&opt->aout);
-    
-    if (opt->v) morpho_freevm(opt->v);
-    if (opt->temp) morpho_freeprogram(opt->temp);
 }
 
 /* **********************************************************************
@@ -766,197 +591,6 @@ void optimize_overwrite(optimizer *opt, bool detectunused) {
 * Control Flow graph
 * ********************************************************************** */
 
-/** Show the current code blocks*/
-void optimize_showcodeblocks(optimizer *opt) {
-    for (codeblockindx i=0; i<opt->cfgraph.count; i++) {
-        codeblock *block = opt->cfgraph.data+i;
-        printf("Block %u [%td, %td]", i, block->start, block->end);
-        if (block->dest[0]>=0) printf(" -> %u", block->dest[0]);
-        if (block->dest[1]>=0) printf(" -> %u", block->dest[1]);
-        printf(" (inbound: %u)\n", block->inbound);
-    }
-}
-
-/** Create a new block that starts at a given index and add it to the control flow graph; returns a handle to this block */
-codeblockindx optimize_newblock(optimizer *opt, instructionindx start) {
-    codeblock new;
-    optimize_initcodeblock(&new, opt->func, start);
-    varray_codeblockwrite(&opt->cfgraph, new);
-    return opt->cfgraph.count-1;
-}
-
-/** Get a block's starting point */
-instructionindx optimize_getstart(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].start;
-}
-
-/** Get a block's end point */
-instructionindx optimize_getend(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].end;
-}
-
-/** Get the function associated with a block */
-objectfunction *optimize_getfunction(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].func;
-}
-
-/** Set a block's end point */
-void optimize_setend(optimizer *opt, codeblockindx handle, instructionindx end) {
-    opt->cfgraph.data[handle].end=end;
-}
-
-/** Indicate that a block is root */
-void optimize_setroot(optimizer *opt, codeblockindx handle) {
-    opt->cfgraph.data[handle].isroot=true;
-}
-
-/** Check if a block is listed as root */
-bool optimize_isroot(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].isroot;
-}
-
-/** Has the block been visited? */
-int optimize_getvisited(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].visited;
-}
-
-/** Increment the inbound counter on a block */
-void optimize_incinbound(optimizer *opt, codeblockindx handle) {
-    opt->cfgraph.data[handle].inbound+=1;
-}
-
-/** Get how many blocks link to this one */
-int optimize_getinbound(optimizer *opt, codeblockindx handle) {
-    return opt->cfgraph.data[handle].inbound;
-}
-
-/** Mark the code block as visited */
-void optimize_visit(optimizer *opt, codeblockindx handle) {
-    opt->cfgraph.data[handle].visited+=1;
-}
-
-/** Save reginfo to the block */
-void optimize_saveregisterstatetoblock(optimizer *opt, codeblockindx handle) {
-    codeblock *block = &opt->cfgraph.data[handle];
-    
-    if (!block->reg || opt->maxreg>block->nreg) block->reg=MORPHO_REALLOC(block->reg, opt->maxreg*sizeof(reginfo));
-    block->nreg=opt->maxreg;
-    
-    if (block->reg) for (unsigned int i=0; i<opt->maxreg; i++) block->reg[i]=opt->reg[i];
-}
-
-/** Adds a source to a block */
-void optimize_addsrc(optimizer *opt, codeblockindx dest, codeblockindx src) {
-    codeblock *block = &opt->cfgraph.data[dest];
-    
-    for (int i=0; i<block->src.count; i++) { // Is the src already part of the block?
-        if (block->src.data[i]==src) return;
-    }
-    varray_codeblockindxwrite(&block->src, src);
-}
-
-/** Adds a destination
- * @param[in] opt - optimizer
- * @param[in] handle - block to add the destination to
- * @param[in] dest - destination block to add */
-void optimize_adddest(optimizer *opt, codeblockindx handle, codeblockindx dest) {
-    codeblock *block = &opt->cfgraph.data[handle];
-    int i;
-    for (i=0; i<2; i++) {
-        if (block->dest[i]==CODEBLOCKDEST_EMPTY) {
-            block->dest[i]=dest;
-            optimize_incinbound(opt, dest);
-            return;
-        }
-    }
-    
-    UNREACHABLE("Too many destinations in code block.");
-}
-
-/** Clear block destination */
-void optimize_cleardest(optimizer *opt, codeblockindx handle) {
-    opt->cfgraph.data[handle].dest[0]=CODEBLOCKDEST_EMPTY;
-    opt->cfgraph.data[handle].dest[1]=CODEBLOCKDEST_EMPTY;
-}
-
-/** Copy block destination */
-void optimize_copydest(optimizer *opt, codeblockindx src, codeblockindx dest) {
-    opt->cfgraph.data[dest].dest[0]=opt->cfgraph.data[src].dest[0];
-    opt->cfgraph.data[dest].dest[1]=opt->cfgraph.data[src].dest[1];
-}
-
-/** Copy block destinations to work list */
-void optimize_desttoworklist(optimizer *opt, codeblockindx src, varray_codeblockindx *worklist) {
-    for (int i=0; i<2; i++) {
-        codeblockindx dest = opt->cfgraph.data[src].dest[i];
-        if (dest!=CODEBLOCKDEST_EMPTY) varray_codeblockindxwrite(worklist, dest);
-    }
-}
-
-/** Splits a block into two
- * @param[in] opt - optimizer
- * @param[in] handle - block to split
- * @param[in] split - instruction index to split at
- * @returns handle of new block */
-codeblockindx optimize_splitblock(optimizer *opt, codeblockindx handle, instructionindx split) {
-    instructionindx start = optimize_getstart(opt, handle),
-                    end = optimize_getend(opt, handle);
-    
-    if (split==start) return handle;
-    if (split<start || split>end) UNREACHABLE("Splitting an invalid block");
-    
-    codeblockindx new = optimize_newblock(opt, split); // Inherits function
-    optimize_setend(opt, new, end);
-    optimize_setend(opt, handle, split-1);
-    optimize_copydest(opt, handle, new); // New block carries over destinations
-    optimize_cleardest(opt, handle);    // } Old block points to new block
-    optimize_adddest(opt, handle, new); // }
-    
-    return new;
-}
-
-/** Finds a block with instruction indx inside
- * @param[in] opt - optimizer
- * @param[in] indx - index to find
- * @param[out] handle - block handle if found
- * @returns true if found, false otherwise */
-bool optimize_findblock(optimizer *opt, instructionindx indx, codeblockindx *handle) {
-    for (codeblockindx i=0; i<opt->cfgraph.count; i++) {
-        if (indx>=opt->cfgraph.data[i].start &&
-            indx<=opt->cfgraph.data[i].end) {
-            *handle=i;
-            return true;
-        }
-    }
-    return false;
-}
-
-/** Processes a branch instruction.
- * @details Finds whether the branch points to or wthin an existing block and either splits it as necessary or creates a new block
- * @param[in] opt - optimizer
- * @param[in] handle - handle of block where the branch is from.
- * @param[out] dest - block handle if found
- * @returns handle for destination branch */
-codeblockindx optimize_branchto(optimizer *opt, codeblockindx handle, instructionindx dest, varray_codeblockindx *worklist) {
-    codeblockindx srcblock, destblock=CODEBLOCKDEST_EMPTY;
-    
-    if (optimize_findblock(opt, dest, &destblock)) {
-        optimize_splitblock(opt, destblock, dest);
-    } else {
-        codeblockindx out = optimize_newblock(opt, dest);
-        varray_codeblockindxwrite(worklist, out); // Add to worklist
-    }
-    
-    if (optimize_findblock(opt, optimizer_currentindx(opt), &srcblock) &&
-        optimize_findblock(opt, dest, &destblock)) {
-        optimize_adddest(opt, srcblock, destblock);
-    } else {
-        UNREACHABLE("Couldn't find block.");
-    }
-    
-    return destblock;
-}
-
 /** Build a code block from the current starting point
  * @param[in] opt - optimizer
  * @param[in] block - block to process
@@ -1022,25 +656,6 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
         optimize_track(opt); // Track register contents
         optimize_overwrite(opt, false);
         optimize_advance(opt);
-    }
-}
-
-/** Add cross references to the sources of each block; done at the end of building the CF graph */
-void optimize_addsrcrefs(optimizer *opt) {
-    for (codeblockindx i=0; i<opt->cfgraph.count; i++) {
-        codeblock *block = optimize_getblock(opt, i);
-        for (int j=0; j<2; j++) if (block->dest[j]!=CODEBLOCKDEST_EMPTY) optimize_addsrc(opt, block->dest[j], i);
-    }
-}
-
-void optimize_addfunction(optimizer *opt, value func);
-
-/** Searches a list of values for entry points */
-void optimize_searchlist(optimizer *opt, varray_value *list) {
-    for (unsigned int i=0; i<list->count; i++) {
-        value entry = list->data[i];
-        
-        if (MORPHO_ISFUNCTION(entry)) optimize_addfunction(opt, entry);
     }
 }
 
@@ -1518,28 +1133,6 @@ void optimize_optimizeblock(optimizer *opt, codeblockindx block, optimizationstr
 #endif
 }
 
-/* **********************************************************************
- * Check for unused instructions
- * ********************************************************************** */
-
-/** Check all blocks for unused instructions */
-/*void optimize_checkunused(optimizer *opt) {
-    //return;
-    for (codeblockindx i=0; i<opt->cfgraph.count; i++) {
-        codeblock *block=optimize_getblock(opt, i);
-        
-        for (registerindx j=0; j<block->nreg; j++) {
-            
-            // This needs to check for side effects to be more general 
-            if (block->reg[j].contains==CONSTANT && // More general check needed!
-                block->reg[j].used==0 &&
-                block->reg[j].block==i &&
-                !optimize_isretained(opt, i, j)) {
-                optimize_replaceunused(opt, &block->reg[j]);
-            }
-        }
-    }
-}*/
 
 /* **********************************************************************
  * Final processing and layout of final program
@@ -1723,35 +1316,4 @@ bool optimization_pass(optimizer *opt, optimizationstrategy *strategylist) {
     varray_codeblockindxclear(&worklist);
     
     return true;
-}
-
-
-/** Public interface to optimizer */
-bool optimize(program *prog) {
-    optimizer opt;
-    optimizationstrategy *pass[2] = { firstpass, secondpass};
-    
-    optimize_init(&opt, prog);
-    
-    optimize_buildcontrolflowgraph(&opt);
-    for (int i=0; i<2; i++) {
-        optimization_pass(&opt, pass[i]);
-    }
-    optimize_layoutblocks(&opt);
-    
-    optimize_clear(&opt);
-    
-    return true;
-}
-
-/* **********************************************************************
- * Initialization/Finalization
- * ********************************************************************** */
-
-/** Initializes the optimizer */
-void optimize_initialize(void) {
-}
-
-/** Finalizes the optimizer */
-void optimize_finalize(void) {
 }

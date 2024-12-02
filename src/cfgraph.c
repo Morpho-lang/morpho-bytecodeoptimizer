@@ -292,11 +292,13 @@ void cfgraph_build(program *in, cfgraph *out) {
     
     cfgraphbuilder_addfunction(&bld, MORPHO_OBJECT(in->global));
     
+    // Identify code blocks
     instructionindx item;
     while (cfgraphbuilder_pop(&bld, &item)) {
         cfgraphbuilder_buildblock(&bld, item);
     }
     
+    // Identify sources and destinations for each code block
     for (int i=0; i<out->count; i++) {
         cfgraphbuilder_blockusage(&bld, &out->data[i]);
         cfgraphbuilder_blockdest(&bld, &out->data[i]);
