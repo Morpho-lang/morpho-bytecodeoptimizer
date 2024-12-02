@@ -56,12 +56,12 @@ bool block_writes(block *b, registerindx r) {
 
 /** Sets source blocks */
 void block_setsource(block *b, instructionindx indx) {
-    dictionary_insert(&b->writes, MORPHO_INTEGER((int) indx), MORPHO_NIL);
+    dictionary_insert(&b->src, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /** Sets destination blocks */
 void block_setdest(block *b, instructionindx indx) {
-    dictionary_insert(&b->writes, MORPHO_INTEGER((int) indx), MORPHO_NIL);
+    dictionary_insert(&b->dest, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /* **********************************************************************
