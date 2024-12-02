@@ -33,6 +33,12 @@ void reginfolist_write(reginfolist *rlist, instructionindx iindx, int i, regcont
     rlist->rinfo[i].type=MORPHO_NIL;
 }
 
+/** Sets the type associated with a register */
+void reginfolist_settype(reginfolist *rlist, int i, value type) {
+    if (i>rlist->nreg) return;
+    rlist->rinfo[i].type=type;
+}
+
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
     for (int i=0; i<rlist->nreg; i++) {

@@ -59,8 +59,9 @@ void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx i
     reginfolist_write(&opt->rlist, opt->pc, r, contents, indx);
 }
 
+/** Callback function to set the type of a register */
 void optimize_settype(optimizer *opt, registerindx r, value type) {
-    
+    reginfolist_settype(&opt->rlist, r, type);
 }
 
 /** Callback function to get the current instruction */

@@ -25,6 +25,11 @@ typedef struct {
  * Opcode tracking functions
  * ********************************************************************** */
 
+void mov_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_write(opt, DECODE_A(instr), REG_REGISTER, DECODE_B(instr));
+}
+
 void lct_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_CONSTANT, DECODE_Bx(instr));
@@ -33,6 +38,10 @@ void lct_trackingfn(optimizer *opt) {
 void lgl_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
+}
+
+void arith_trackingfn(optimizer *opt) {
+    
 }
 
 void cmp_trackingfn(optimizer *opt) {
@@ -49,20 +58,20 @@ int nopcodes;
 opcodeinfo opcodetable[] = {
     { OP_NOP, "nop", OPCODE_BLANK, NULL },
     
-    { OP_MOV, "mov", OPCODE_OVERWRITES_A | OPCODE_USES_B, NULL },
+    { OP_MOV, "mov", OPCODE_OVERWRITES_A | OPCODE_USES_B, mov_trackingfn },
     
-    { OP_ADD, "add", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_SUB, "sub", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_MUL, "mul", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_DIV, "div", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_POW, "pow", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
+    { OP_ADD, "add", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn },
+    { OP_SUB, "sub", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn },
+    { OP_MUL, "mul", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn },
+    { OP_DIV, "div", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn },
+    { OP_POW, "pow", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn },
     
-    { OP_NOT, "not", OPCODE_OVERWRITES_A | OPCODE_USES_B, NULL },
+    { OP_NOT, "not", OPCODE_OVERWRITES_A | OPCODE_USES_B, cmp_trackingfn },
     
-    { OP_EQ, "eq",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_NEQ, "neq", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_LT, "lt",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_LE, "le",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
+    { OP_EQ, "eq",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn },
+    { OP_NEQ, "neq", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn },
+    { OP_LT, "lt",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn },
+    { OP_LE, "le",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn },
     
     { OP_PUSHERR, "pusherr", OPCODE_BLANK, NULL },
     { OP_POPERR,  "poperr",  OPCODE_ENDSBLOCK | OPCODE_BRANCH, NULL },
