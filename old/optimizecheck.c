@@ -100,8 +100,6 @@ bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, i
  * Reginfo
  * ----------- */
 
-
-
 /** Indicates an instruction uses a register */
 void optimize_reguse(optimizer *opt, registerindx reg) {
     //if (opt->reg[reg].contains==NOTHING) printf("Unresolved reference in reg %u.\n", reg);
@@ -118,11 +116,6 @@ void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
             opt->reg[i].contains=VALUE;
         }
     }
-}
-
-/** Sets the type of value in a register */
-void optimize_regsettype(optimizer *opt, registerindx reg, value value) {
-    opt->reg[reg].type=value;
 }
 
 /** Resolves the type of value produced by an arithmetic instruction */
@@ -156,26 +149,6 @@ void optimize_regoverwrite(optimizer *opt, registerindx reg) {
     opt->overwrites=reg;
 }
 
-
-/* ------------
- * Instructions
- * ------------ */
-
-/** Replaces an instruction at a given indx */
-void optimize_replaceinstructionat(optimizer *opt, instructionindx ix, instruction inst) {
-    instruction old = opt->out->code.data[ix];
-    if (ix==INSTRUCTIONINDX_EMPTY) UNREACHABLE("Trying to replace an undefined instruction.");
-    if (opt->out->code.data[ix]!=inst) {
-        /* Update usage etc. here (should be expanded on) */
-        if (DECODE_OP(old)==OP_LGL) {
-            optimize_unuseglobal(opt, DECODE_Bx(old));
-        }
-        
-        opt->nchanged+=1;
-        opt->out->code.data[ix]=inst;
-    }
-}
-
 /* ------------
  * Search
  * ------------ */
@@ -188,35 +161,6 @@ registerindx optimize_findoriginalregister(optimizer *opt, registerindx reg) {
         if (out==reg) return out;
     }
     return out;
-}
-
-/** Finds if a given register, or one that it duplicates, contains a constant. If so returns the constant indx and returns true */
-bool optimize_findconstant(optimizer *opt, registerindx reg, indx *out) {
-    registerindx r = optimize_findoriginalregister(opt, reg);
-    
-    if (opt->reg[r].contains==CONSTANT) {
-        *out = opt->reg[r].id;
-        return true;
-    }
-    return false;
-}
-
-/** Adds a constant to the current constant table*/
-bool optimize_addconstant(optimizer *opt, value val, indx *out) {
-    unsigned int k;
-    // Does the constant already exist?
-    if (varray_valuefindsame(&opt->func->konst, val, &k)) {
-        *out=k; return true;
-    }
-    varray_valuewrite(&opt->func->konst, val);
-    *out=opt->func->konst.count-1;
-    
-    if (MORPHO_ISOBJECT(val)) {
-        // Bind the object to the program
-        program_bindobject(opt->out, MORPHO_GETOBJECT(val));
-    }
-    
-    return true;
 }
 
 /* **********************************************************************
@@ -756,7 +700,6 @@ bool optimize_duplicate_loadglobal(optimizer *opt) {
     
     return false;
 }
-
 
 /** Replaces duplicate registers  */
 bool optimize_register_replacement(optimizer *opt) {

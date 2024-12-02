@@ -47,6 +47,35 @@ void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
 }
 
+/** Callback function to get a constant from the current constant table */
+value optimize_getconstant(optimizer *opt, indx i) {
+    if (i>opt->currentblk->func->konst.count) return MORPHO_NIL;
+    return opt->currentblk->func->konst.data[i];
+}
+
+/** Adds a constant to the current constant table */
+bool optimize_addconstant(optimizer *opt, value val, indx *out) {
+    objectfunction *func = opt->currentblk->func;
+    
+    // Does the constant already exist?
+    unsigned int k;
+    if (varray_valuefindsame(&func->konst, val, &k)) {
+        *out = (indx) k;
+        return true;
+    }
+    
+    // If not add it
+    if (!varray_valueadd(&func->konst, &val, 1)) return false;
+        
+    *out=func->konst.count-1;
+    
+    if (MORPHO_ISOBJECT(val)) { // Bind the object to the program
+        program_bindobject(opt->prog, MORPHO_GETOBJECT(val));
+    }
+    
+    return true;
+}
+
 /** Checks if a register holds a constant */
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     regcontents contents=REG_EMPTY;
@@ -57,12 +86,6 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     if (success) *out = ix;
     
     return success;
-}
-
-/** Callback function to get a constant from the current constant table */
-value optimize_getconstant(optimizer *opt, indx i) {
-    if (i>opt->currentblk->func->konst.count) return MORPHO_NIL;
-    return opt->currentblk->func->konst.data[i];
 }
 
 /** Callback function to get the current instruction */

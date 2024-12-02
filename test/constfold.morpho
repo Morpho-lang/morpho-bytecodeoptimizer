@@ -1,0 +1,5 @@
+// Constant folding
+
+import bytecodeoptimizer
+
+print 2*2 // expect: 4
