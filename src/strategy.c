@@ -47,7 +47,7 @@ optimizationstrategy strategies[] = {
  * Apply relevant strategies
  * ********************************************************************** */
 
-void strategy_apply(optimizer *opt, int maxlevel) {
+void strategy_optimizeinstruction(optimizer *opt, int maxlevel) {
     instruction op = DECODE_OP(optimize_getinstruction(opt));
     
     for (int i=0; strategies[i].match!=OP_END; i++) {

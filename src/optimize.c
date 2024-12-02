@@ -92,7 +92,7 @@ bool optimize_block(optimizer *opt, block *blk) {
         if (trackingfn) trackingfn(opt);
         
         // Apply relevant optimization strategies
-        strategy_apply(opt, 0);
+        strategy_optimizeinstruction(opt, 0);
         
         reginfolist_show(&opt->rlist);
     }

@@ -101,11 +101,6 @@ bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, i
  * ----------- */
 
 
-/** Sets the contents of a register */
-static inline void optimize_regcontents(optimizer *opt, registerindx reg, returntype type, indx id) {
-    opt->reg[reg].contains=type;
-    opt->reg[reg].id=id;
-}
 
 /** Indicates an instruction uses a register */
 void optimize_reguse(optimizer *opt, registerindx reg) {
@@ -762,18 +757,6 @@ bool optimize_duplicate_loadglobal(optimizer *opt) {
     return false;
 }
 
-/** Reduces powers to multiplies */
-bool optimize_power_reduction(optimizer *opt) {
-    indx kindx;
-    if (optimize_findconstant(opt, DECODE_C(opt->current), &kindx)) {
-        value konst = opt->func->konst.data[kindx];
-        if (MORPHO_ISINTEGER(konst) && MORPHO_GETINTEGERVALUE(konst)==2) {
-            optimize_replaceinstruction(opt, ENCODE(OP_MUL, DECODE_A(opt->current), DECODE_B(opt->current), DECODE_B(opt->current)));
-        }
-    }
-    
-    return false;
-}
 
 /** Replaces duplicate registers  */
 bool optimize_register_replacement(optimizer *opt) {
