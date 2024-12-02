@@ -8,6 +8,7 @@
 #include "opcodes.h"
 #include "reginfo.h"
 #include "cfgraph.h"
+#include "optimize.h"
 
 /* **********************************************************************
  * Opcodes
@@ -24,15 +25,12 @@ typedef struct {
  * Opcode process functions
  * ********************************************************************** */
 
-void optimize_write(void *in, registerindx r, regcontents contents, indx indx);
-instruction optimize_getinstruction(void *in);
-
-void lct_processfn(void *opt) {
+void lct_processfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_CONSTANT, DECODE_Bx(instr));
 }
 
-void lgl_processfn(void *opt) {
+void lgl_processfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
 }

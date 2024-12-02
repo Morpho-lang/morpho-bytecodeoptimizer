@@ -4,8 +4,8 @@
  *  @brief Optimizer for compiled morpho bytecode
 */
 
-#include "optimize.h"
 #include "morphocore.h"
+#include "optimize.h"
 #include "opcodes.h"
 #include "cfgraph.h"
 #include "reginfo.h"
@@ -13,17 +13,6 @@
 /* **********************************************************************
  * Optimizer data structure
  * ********************************************************************** */
-
-typedef struct {
-    program *prog;
-    
-    cfgraph graph;
-
-    reginfolist rlist;
-    
-    instructionindx pc;
-    instruction current;
-} optimizer;
 
 /** Initializes an optimizer data structure */
 void optimizer_init(optimizer *opt, program *prog) {
@@ -66,14 +55,12 @@ void optimize_fetch(optimizer *opt, instructionindx i) {
 }
 
 /** Callback function to set the contents of a register */
-void optimize_write(void *in, registerindx r, regcontents contents, indx indx) {
-    optimizer *opt = (optimizer *) in;
+void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx indx) {
     reginfolist_write(&opt->rlist, opt->pc, r, contents, indx);
 }
 
 /** Callback function to get the current instruction */
-instruction optimize_getinstruction(void *in) {
-    optimizer *opt = (optimizer *) in;
+instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
 }
 
