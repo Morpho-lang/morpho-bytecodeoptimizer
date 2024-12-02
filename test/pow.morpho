@@ -2,10 +2,6 @@
 
 import bytecodeoptimizer
 
-fn sphere (x,y,z) {
-  return x^2+y^2+z^2
-}
+var x = 2
 
-for (i in 1..20000000) {
-  sphere(0.3,0.5,0.7)
-}
+print x^2 // expect: 4

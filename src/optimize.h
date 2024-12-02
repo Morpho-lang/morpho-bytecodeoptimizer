@@ -40,7 +40,9 @@ extern value typebool;
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
 void optimize_settype(optimizer *opt, registerindx i, value type);
 value optimize_getconstant(optimizer *opt, indx i);
+bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
 
 instruction optimize_getinstruction(optimizer *opt);
+void optimize_replaceinstruction(optimizer *opt, instruction instr);
 
 #endif

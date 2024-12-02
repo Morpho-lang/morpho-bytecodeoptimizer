@@ -47,6 +47,18 @@ void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
 }
 
+/** Checks if a register holds a constant */
+bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
+    regcontents contents=REG_EMPTY;
+    indx ix;
+    if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
+    
+    bool success=(contents==REG_CONSTANT);
+    if (success) *out = ix;
+    
+    return success;
+}
+
 /** Callback function to get a constant from the current constant table */
 value optimize_getconstant(optimizer *opt, indx i) {
     if (i>opt->currentblk->func->konst.count) return MORPHO_NIL;
@@ -56,6 +68,11 @@ value optimize_getconstant(optimizer *opt, indx i) {
 /** Callback function to get the current instruction */
 instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
+}
+
+/** Callback function to get the current instruction */
+void optimize_replaceinstruction(optimizer *opt, instruction instr) {
+    opt->current=opt->prog->code.data[opt->pc]=instr;
 }
 
 /** Optimize a given block */
