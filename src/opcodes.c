@@ -46,7 +46,7 @@ opcodeinfo opcodetable[] = {
     
     { OP_CALL,    "call",    OPCODE_USES_A },
     { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B },
-    { OP_RETURN,  "return",  OPCODE_USES_B }, // Cond on A
+    { OP_RETURN,  "return",  OPCODE_USES_B | OPCODE_ENDSBLOCK | OPCODE_TERMINATING }, // Cond on A
     
     { OP_CLOSEUP, "closeup", OPCODE_UNSUPPORTED },
     
@@ -68,7 +68,7 @@ opcodeinfo opcodetable[] = {
     
     { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC },
     
-    { OP_END, "end", OPCODE_ENDSBLOCK }
+    { OP_END, "end", OPCODE_ENDSBLOCK | OPCODE_TERMINATING }
 };
 
 /** Get the flags associated with a given opcode */

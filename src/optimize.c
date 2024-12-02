@@ -7,6 +7,7 @@
 #include "optimize.h"
 #include "opcodes.h"
 #include "cfgraph.h"
+#include "reginfo.h"
 
 /* **********************************************************************
  * Optimizer data structure
@@ -16,12 +17,15 @@ typedef struct {
     program *prog;
     
     cfgraph graph;
+    
+    reginfolist rlist;
 } optimizer;
 
 /** Initializes an optimizer data structure */
 void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
     cfgraph_init(&opt->graph);
+    reginfolist_init(&opt->rlist, 0);
 }
 
 /** Clears an optimizer data structure */
@@ -53,6 +57,8 @@ optimizationstrategy strategies[] = {
 
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
+    reginfolist_init(&opt->rlist, blk->func->nregs);
+    
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         
     }
@@ -69,6 +75,8 @@ bool optimize(program *in) {
     optimizer_init(&opt, in);
     
     cfgraph_build(in, &opt.graph);
+    
+    optimize_block(&opt, &opt.graph.data[0]);
     
     optimize_clear(&opt);
     

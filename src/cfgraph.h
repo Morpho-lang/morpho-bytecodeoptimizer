@@ -26,6 +26,8 @@ typedef struct sblock {
     
     dictionary uses; /** Registers that the block uses as input */
     dictionary writes; /** Registers that the block writes to */
+    
+    objectfunction *func; /** Function that encapsulates the block */
 } block;
 
 /* **********************************************************************

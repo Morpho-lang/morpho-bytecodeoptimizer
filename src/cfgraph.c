@@ -135,6 +135,7 @@ typedef struct {
     program *in;
     cfgraph *out;
     varray_instructionindx worklist;
+    objectfunction *currentfn;
 } cfgraphbuilder;
 
 /** Initializes an optimizer data structure */
@@ -169,6 +170,16 @@ instruction cfgraphbuilder_fetch(cfgraphbuilder *bld, instructionindx i) {
     return bld->in->code.data[i];
 }
 
+/** Sets the current function */
+void cfgraphbuilder_setcurrentfn(cfgraphbuilder *bld, objectfunction *func) {
+    bld->currentfn=func;
+}
+
+/** Gets the current function */
+objectfunction *cfgraphbuilder_currentfn(cfgraphbuilder *bld) {
+    return bld->currentfn;
+}
+
 /* **********************************************************************
  * Build basic blocks
  * ********************************************************************** */
@@ -196,6 +207,7 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
 /** Adds a function to the control flow graph */
 void cfgraphbuilder_addfunction(cfgraphbuilder *bld, value func) {
     if (!MORPHO_ISFUNCTION(func)) return;
+    cfgraphbuilder_setcurrentfn(bld, MORPHO_GETFUNCTION(func));
     cfgraphbuilder_push(bld, MORPHO_GETFUNCTION(func)->entry);
 }
 
@@ -204,6 +216,7 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
     block_init(&blk);
     blk.start=start;
+    blk.func=cfgraphbuilder_currentfn(bld);
     
     for (instructionindx i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
@@ -266,7 +279,7 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, block *blk) {
     instruction op = DECODE_OP(instr);
     opcodeflags flags = opcode_getflags(op);
     
-    if (op==OP_END) return; // End of program
+    if (flags & OPCODE_TERMINATING) return; // Terminal blocks have no destination
     
     if (flags & OPCODE_BRANCH) {
         instructionindx dest = blk->end+1+DECODE_sBx(instr);
