@@ -100,17 +100,6 @@ bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, i
  * Reginfo
  * ----------- */
 
-/** Clears the reginfo structure */
-void optimize_regclear(optimizer *opt) {
-    for (unsigned int i=0; i<MORPHO_MAXARGS; i++) {
-        opt->reg[i].contains=NOTHING;
-        opt->reg[i].id=0;
-        opt->reg[i].used=0;
-        opt->reg[i].iix=INSTRUCTIONINDX_EMPTY;
-        opt->reg[i].block=CODEBLOCKDEST_EMPTY;
-        opt->reg[i].type=MORPHO_NIL;
-    }
-}
 
 /** Sets the contents of a register */
 static inline void optimize_regcontents(optimizer *opt, registerindx reg, returntype type, indx id) {
@@ -172,39 +161,6 @@ void optimize_regoverwrite(optimizer *opt, registerindx reg) {
     opt->overwrites=reg;
 }
 
-/** Show the contents of a register */
-void optimize_showreginfo(unsigned int regmax, reginfo *reg) {
-    for (unsigned int i=0; i<regmax; i++) {
-        printf("|\tr%u : ", i);
-        switch (reg[i].contains) {
-            case NOTHING: break;
-            case REGISTER: printf("r%td", reg[i].id); break;
-            case GLOBAL: printf("g%td", reg[i].id); break;
-            case CONSTANT: printf("c%td", reg[i].id); break;
-            case UPVALUE: printf("u%td", reg[i].id); break;
-            case VALUE: printf("value"); break;
-        }
-        if (reg[i].contains!=NOTHING) {
-            printf(" [%u] : %u", reg[i].block, reg[i].used);
-            if (!MORPHO_ISNIL(reg[i].type)) {
-                printf(" (");
-                if (OPTIMIZER_ISAMBIGUOUS(reg[i].type)) printf("ambiguous");
-                else morpho_printvalue(reg[i].type);
-                printf(")");
-            }
-        }
-        printf("\n");
-    }
-    printf("\n");
-}
-
-/** Show register contents */
-void optimize_regshow(optimizer *opt) {
-    unsigned int regmax = opt->maxreg;
-    for (unsigned int i=0; i<opt->maxreg; i++) if (opt->reg[i].contains!=NOTHING) regmax=i;
-    
-    optimize_showreginfo(opt->maxreg, opt->reg);
-}
 
 /* ------------
  * Instructions

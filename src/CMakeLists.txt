@@ -5,4 +5,5 @@ target_sources(bytecodeoptimizer
         opcodes.c    opcodes.h
         optimize.c   optimize.h  
         reginfo.c    reginfo.h 
+        strategy.c   strategy.h
 )

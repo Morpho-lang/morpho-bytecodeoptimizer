@@ -9,6 +9,7 @@
 #include "opcodes.h"
 #include "cfgraph.h"
 #include "reginfo.h"
+#include "strategy.h"
 
 /* **********************************************************************
  * Optimizer data structure
@@ -29,24 +30,6 @@ void optimize_clear(optimizer *opt) {
 /* **********************************************************************
  * Optimize a code block
  * ********************************************************************** */
-
-typedef bool (*optimizationstrategyfn) (optimizer *opt);
-
-typedef struct {
-    instruction match;
-    optimizationstrategyfn fn;
-} optimizationstrategy;
-
-bool optimize_dummy(optimizer *opt) {
-    return false;
-}
-
-#define OP_ANY (OP_END + 1)
-
-optimizationstrategy strategies[] = {
-    { OP_ANY, optimize_dummy },
-    { OP_END, NULL }
-};
 
 /** Fetches the instruction at index i */
 void optimize_fetch(optimizer *opt, instructionindx i) {
@@ -90,6 +73,9 @@ bool optimize_block(optimizer *opt, block *blk) {
         // Perform trackinging to track register contents
         opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
         if (trackingfn) trackingfn(opt);
+        
+        // Apply relevant optimization strategies
+        strategy_apply(opt, 0);
         
         reginfolist_show(&opt->rlist);
     }
