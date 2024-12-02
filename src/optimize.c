@@ -30,6 +30,35 @@ void optimize_clear(optimizer *opt) {
 }
 
 /* **********************************************************************
+ * Optimize a code block
+ * ********************************************************************** */
+
+typedef bool (*optimizationstrategyfn) (optimizer *opt);
+
+typedef struct {
+    instruction match;
+    optimizationstrategyfn fn;
+} optimizationstrategy;
+
+bool optimize_dummy(optimizer *opt) {
+    return false;
+}
+
+#define OP_ANY (OP_END + 1)
+
+optimizationstrategy strategies[] = {
+    { OP_ANY, optimize_dummy },
+    { OP_END, NULL }
+};
+
+/** Optimize a given block */
+bool optimize_block(optimizer *opt, block *blk) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        
+    }
+}
+
+/* **********************************************************************
  * Optimizer 
  * ********************************************************************** */
 

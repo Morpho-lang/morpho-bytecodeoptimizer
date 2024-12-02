@@ -21,10 +21,8 @@ void block_init(block *b) {
     b->start=INSTRUCTIONINDX_EMPTY;
     b->end=INSTRUCTIONINDX_EMPTY;
     
-    b->dest[0]=INSTRUCTIONINDX_EMPTY;
-    b->dest[1]=INSTRUCTIONINDX_EMPTY;
-    
     dictionary_init(&b->src);
+    dictionary_init(&b->dest);
     dictionary_init(&b->uses);
     dictionary_init(&b->writes);
 }
@@ -57,16 +55,13 @@ bool block_writes(block *b, registerindx r) {
 }
 
 /** Sets source blocks */
-void block_setsource(block *b, instructionindx dest) {
-    dictionary_insert(&b->writes, MORPHO_INTEGER((int) dest), MORPHO_NIL);
+void block_setsource(block *b, instructionindx indx) {
+    dictionary_insert(&b->writes, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /** Sets destination blocks */
-void block_setdest(block *b, instructionindx dest) {
-    for (int i=0; i<2; i++) {
-        if (b->dest[i]==INSTRUCTIONINDX_EMPTY) { b->dest[i]=dest; return; }
-    }
-    UNREACHABLE("Too many destinations set from block.");
+void block_setdest(block *b, instructionindx indx) {
+    dictionary_insert(&b->writes, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /* **********************************************************************
@@ -84,11 +79,29 @@ void cfgraph_clear(cfgraph *graph) {
     varray_blockclear(graph);
 }
 
+/* Print the keys in a dictionary with a label */
+void _cfgraph_printdict(char *label, dictionary *dict) {
+    if (dict->count==0) return;
+    printf("( %s: ", label);
+    for (int i=0; i<dict->capacity; i++) {
+        if (MORPHO_ISNIL(dict->contents[i].key)) continue;
+        morpho_printvalue(NULL, dict->contents[i].key);
+        printf(" ");
+    }
+    printf(") ");
+}
+
 /** Shows code blocks in a cfgraph */
 void cfgraph_show(cfgraph *graph) {
     for (int i=0; i<graph->count; i++) {
         block *blk = graph->data+i;
-        printf("Block %u [%td, %td]\n", i, blk->start, blk->end);
+        printf("Block %u [%td, %td] ", i, blk->start, blk->end);
+        
+        _cfgraph_printdict("Source", &blk->src);
+        _cfgraph_printdict("Dest", &blk->dest);
+        _cfgraph_printdict("Uses", &blk->uses);
+        _cfgraph_printdict("Writes", &blk->writes);
+        printf("\n");
     }
 }
 
@@ -219,7 +232,7 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
 
 /** Adds metadata to a given block */
 void cfgraphbuilder_addmetadata(cfgraphbuilder *bld, block *blk) {
-    for (instructionindx i=blk->start; i<cfgraphbuilder_countinstructions(bld); i++) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
@@ -234,7 +247,8 @@ void cfgraphbuilder_addmetadata(cfgraphbuilder *bld, block *blk) {
             !block_writes(blk, DECODE_B(instr))) {
             block_setuses(blk, DECODE_B(instr));
         }
-        if (flags & OPCODE_USES_C) {
+        if (flags & OPCODE_USES_C &&
+            !block_writes(blk, DECODE_C(instr))) {
             block_setuses(blk, DECODE_C(instr));
         }
     }

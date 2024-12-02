@@ -1348,7 +1348,6 @@ bool optimize_constant_global(optimizer *opt) {
     return false;
 }
 
-
 /** Tracks information written to a global */
 bool optimize_storeglobal_trackcontents(optimizer *opt) {
     registerindx rix = DECODE_A(opt->current);
