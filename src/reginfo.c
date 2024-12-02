@@ -23,7 +23,28 @@ void reginfolist_init(reginfolist *rlist, int nreg) {
     for (int i=0; i<nreg; i++) reginfo_init(&rlist->rinfo[i]);
 }
 
+/** Writes a value to a register */
+void reginfolist_write(reginfolist *rlist, instructionindx iindx, int i, regcontents contents, indx indx) {
+    if (i>rlist->nreg) return;
+    rlist->rinfo[i].contents=contents;
+    rlist->rinfo[i].indx=indx;
+    rlist->rinfo[i].nused=0;
+    rlist->rinfo[i].iindx=iindx;
+    rlist->rinfo[i].type=MORPHO_NIL;
+}
+
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
-    
+    for (int i=0; i<rlist->nreg; i++) {
+        printf("|\tr%u : ", i);
+        switch (rlist->rinfo[i].contents) {
+            case REG_EMPTY: break;
+            case REG_REGISTER: printf("r%td", rlist->rinfo[i].indx); break;
+            case REG_GLOBAL: printf("g%td", rlist->rinfo[i].indx); break;
+            case REG_CONSTANT: printf("c%td", rlist->rinfo[i].indx); break;
+            case REG_UPVALUE: printf("u%td", rlist->rinfo[i].indx); break;
+            default: break;
+        }
+        printf("\n");
+    }
 }

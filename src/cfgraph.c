@@ -4,6 +4,7 @@
  *  @brief Control flow graph
 */
 
+#include "optimize.h"
 #include "cfgraph.h"
 #include "opcodes.h"
 

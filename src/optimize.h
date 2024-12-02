@@ -13,7 +13,4 @@
 #include <morpho/dictionary.h>
 #include <morpho.h>
 
-void bytecodeoptimizer_initialize(void);
-void bytecodeoptimizer_finalize(void);
-
 #endif

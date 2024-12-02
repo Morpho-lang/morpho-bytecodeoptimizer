@@ -24,7 +24,15 @@ typedef unsigned int opcodeflags;
 #define OPCODE_CONDITIONAL      (1<<9)
 #define OPCODE_TERMINATING      (1<<10)
 
+/** Function that will be called by the optimizer to set the contents of the register info file */
+typedef void (*opcodeprocessfn) (void *opt);
+
+/* **********************************************************************
+ * Interface
+ * ********************************************************************** */
+
 opcodeflags opcode_getflags(instruction opcode);
+extern opcodeprocessfn opcode_getprocessfn(instruction opcode);
 
 void opcode_initialize(void);
 

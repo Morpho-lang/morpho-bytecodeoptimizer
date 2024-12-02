@@ -1,4 +1,4 @@
-/** @file block.h
+/** @file cfgraph.h
  *  @author T J Atherton
  *
  *  @brief Basic blocks
@@ -6,8 +6,6 @@
 
 #ifndef cfgraph_h
 #define cfgraph_h
-
-#include "optimize.h"
 
 DECLARE_VARRAY(instructionindx, instructionindx)
 
