@@ -4,7 +4,7 @@
  *  @brief Data structure to track register status
 */
 
-#include "optimize.h"
+#include "morphocore.h"
 #include "reginfo.h"
 #include "cfgraph.h"
 

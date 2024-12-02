@@ -5,6 +5,7 @@
 */
 
 #include "optimize.h"
+#include "morphocore.h"
 #include "opcodes.h"
 #include "cfgraph.h"
 #include "reginfo.h"

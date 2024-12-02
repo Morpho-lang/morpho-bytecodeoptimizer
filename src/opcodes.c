@@ -4,7 +4,7 @@
  *  @brief Database of opcodes and their properties
 */
 
-#include "optimize.h"
+#include "morphocore.h"
 #include "opcodes.h"
 #include "reginfo.h"
 #include "cfgraph.h"

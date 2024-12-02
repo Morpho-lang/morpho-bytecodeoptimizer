@@ -7,7 +7,7 @@
 #ifndef opcodes_h
 #define opcodes_h
 
-#include "optimize.h"
+#include "morphocore.h"
 
 typedef unsigned int opcodeflags;
 

@@ -7,7 +7,7 @@
 #ifndef reginfo_h
 #define reginfo_h
 
-#include "optimize.h"
+#include "morphocore.h"
 
 /* **********************************************************************
  * Reginfo

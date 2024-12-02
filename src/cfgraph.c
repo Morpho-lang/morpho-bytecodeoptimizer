@@ -4,7 +4,7 @@
  *  @brief Control flow graph
 */
 
-#include "optimize.h"
+#include "morphocore.h"
 #include "cfgraph.h"
 #include "opcodes.h"
 
