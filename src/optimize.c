@@ -78,6 +78,7 @@ instruction optimize_getinstruction(void *in) {
 
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
+    printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
     reginfolist_init(&opt->rlist, blk->func->nregs);
     
     for (instructionindx i=blk->start; i<=blk->end; i++) {
@@ -105,7 +106,7 @@ bool optimize(program *in) {
     
     cfgraph_build(in, &opt.graph);
     
-    optimize_block(&opt, &opt.graph.data[0]);
+    for (int i=0; i<opt.graph.count; i++) optimize_block(&opt, &opt.graph.data[i]);
     
     optimize_clear(&opt);
     
