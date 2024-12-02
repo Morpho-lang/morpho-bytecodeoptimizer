@@ -230,8 +230,8 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     cfgraph_addblock(bld->out, &blk);
 }
 
-/** Adds metadata to a given block */
-void cfgraphbuilder_addmetadata(cfgraphbuilder *bld, block *blk) {
+/** Determines which registers a block uses and writes to */
+void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
@@ -254,6 +254,32 @@ void cfgraphbuilder_addmetadata(cfgraphbuilder *bld, block *blk) {
     }
 }
 
+/** Finds the destination block dest and add src to its source list */
+void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx src, instructionindx dest) {
+    block *blk;
+    if (cfgraph_find(bld->out, dest, &blk)) block_setsource(blk, src);
+}
+
+/** Determines the destination blocks for a given block  */
+void cfgraphbuilder_blockdest(cfgraphbuilder *bld, block *blk) {
+    instruction instr = cfgraphbuilder_fetch(bld, blk->end); // Only need to look at last instruction
+    instruction op = DECODE_OP(instr);
+    opcodeflags flags = opcode_getflags(op);
+    
+    if (op==OP_END) return; // End of program
+    
+    if (flags & OPCODE_BRANCH) {
+        instructionindx dest = blk->end+1+DECODE_sBx(instr);
+        block_setdest(blk, dest);
+        cfgraphbuilder_setsrc(bld, blk->start, dest);
+        
+        if (!(flags & OPCODE_CONDITIONAL)) return; // Unconditional branches link only to their dest
+    }
+    
+    block_setdest(blk, blk->end+1); // Link to following block
+    cfgraphbuilder_setsrc(bld, blk->start, blk->end+1);
+}
+
 /* **********************************************************************
  * Build control flow graph
  * ********************************************************************** */
@@ -272,7 +298,8 @@ void cfgraph_build(program *in, cfgraph *out) {
     }
     
     for (int i=0; i<out->count; i++) {
-        cfgraphbuilder_addmetadata(&bld, &out->data[i]);
+        cfgraphbuilder_blockusage(&bld, &out->data[i]);
+        cfgraphbuilder_blockdest(&bld, &out->data[i]);
     }
     
     cfgraphbuilder_clear(&bld);
