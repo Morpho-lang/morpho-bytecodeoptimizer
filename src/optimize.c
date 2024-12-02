@@ -79,6 +79,7 @@ bool optimize_block(optimizer *opt, block *blk) {
         
         reginfolist_show(&opt->rlist);
     }
+    return true;
 }
 
 /* **********************************************************************
@@ -106,6 +107,7 @@ bool optimize(program *in) {
 
 value Bool_prnt(vm *v, int nargs, value *args) {
     object_print(v, MORPHO_GETARG(args, 0));
+    return MORPHO_SELF(args); 
 }
 
 MORPHO_BEGINCLASS(Bool)
