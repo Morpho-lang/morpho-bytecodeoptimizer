@@ -20,6 +20,9 @@ DECLARE_VARRAY(instructionindx, instructionindx)
 typedef struct sblock {
     instructionindx start; /** First instruction in the block */
     instructionindx end; /** Last instruction in the block */
+    
+    dictionary uses; /** Registers that the block uses as input */
+    dictionary writes; /** Registers that the block writes to */
 } block;
 
 /* **********************************************************************
@@ -36,6 +39,11 @@ typedef varray_block cfgraph;
 
 void block_init(block *b);
 void block_clear(block *b);
+
+void block_setuses(block *b, registerindx r);
+void block_setwrites(block *b, registerindx r);
+bool block_uses(block *b, registerindx r);
+bool block_writes(block *b, registerindx r);
 
 void cfgraph_init(cfgraph *graph);
 void cfgraph_clear(cfgraph *graph);

@@ -4,6 +4,8 @@
  *  @brief Control flow graph
 */
 
+#include <morpho/dictionary.h>
+
 #include "cfgraph.h"
 #include "opcodes.h"
 
@@ -20,11 +22,35 @@ typedef unsigned int blockindx;
 void block_init(block *b) {
     b->start=INSTRUCTIONINDX_EMPTY;
     b->end=INSTRUCTIONINDX_EMPTY;
+    
+    dictionary_init(&b->uses);
+    dictionary_init(&b->writes);
 }
 
 /** Clears a basic block structure */
 void block_clear(block *b) {
-    
+    dictionary_clear(&b->uses);
+    dictionary_clear(&b->writes);
+}
+
+/** Declare that a block uses a given register as input */
+void block_setuses(block *b, registerindx r) {
+    dictionary_insert(&b->uses, MORPHO_INTEGER((int) r), MORPHO_NIL);
+}
+
+/** Declare that a block overwrites a given register */
+void block_setwrites(block *b, registerindx r) {
+    dictionary_insert(&b->writes, MORPHO_INTEGER((int) r), MORPHO_NIL);
+}
+
+/** Check if a block uses a given register */
+bool block_uses(block *b, registerindx r) {
+    return dictionary_get(&b->uses, MORPHO_INTEGER((int) r), NULL);
+}
+
+/** Check if a block overwrites a given register */
+bool block_writes(block *b, registerindx r) {
+    return dictionary_get(&b->writes, MORPHO_INTEGER((int) r), NULL);
 }
 
 /* **********************************************************************
@@ -38,6 +64,7 @@ void cfgraph_init(cfgraph *graph) {
 
 /** Clears an cfgraph data structure */
 void cfgraph_clear(cfgraph *graph) {
+    for (int i=0; i<graph->count; i++) block_clear(&graph->data[i]);
     varray_blockclear(graph);
 }
 
@@ -113,6 +140,10 @@ instruction cfgraphbuilder_fetch(cfgraphbuilder *bld, instructionindx i) {
     return bld->in->code.data[i];
 }
 
+/* **********************************************************************
+ * Build basic blocks
+ * ********************************************************************** */
+
 /** Splits a block at instruction 'split' */
 void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split) {
     if (blk->start==split) return; // No need to split
@@ -121,10 +152,8 @@ void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split
     cfgraphbuilder_push(bld, split);
 }
 
-/** Processes a branch instruction.
- * @details Finds whether the branch points to or wthin an existing block and either splits it as necessary or creates a new block
- * @param[in] opt - optimizer
- * @param[in] start - Instructionindx that would start the block  */
+/** Finds whether the branch points to or wthin an existing block and either splits it as necessary
+    or creates a new block */
 void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     block *old;
         
@@ -149,7 +178,6 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     
     for (instructionindx i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
-        
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
         // Conditional branches generate a block immediately afterwards
@@ -166,10 +194,39 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
             blk.end=i;
             break;
         }
+        
+        // Should also check that we don't run into an existing block
     }
     
     cfgraph_addblock(bld->out, &blk);
 }
+
+/** Adds metadata to a given block */
+void cfgraphbuilder_addmetadata(cfgraphbuilder *bld, block *blk) {
+    for (instructionindx i=blk->start; i<cfgraphbuilder_countinstructions(bld); i++) {
+        instruction instr = cfgraphbuilder_fetch(bld, i);
+        opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+        
+        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
+        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
+        
+        if (flags & OPCODE_USES_A &&
+            !block_writes(blk, DECODE_A(instr))) {
+            block_setuses(blk, DECODE_A(instr));
+        }
+        if (flags & OPCODE_USES_B &&
+            !block_writes(blk, DECODE_B(instr))) {
+            block_setuses(blk, DECODE_B(instr));
+        }
+        if (flags & OPCODE_USES_C) {
+            block_setuses(blk, DECODE_C(instr));
+        }
+    }
+}
+
+/* **********************************************************************
+ * Build control flow graph
+ * ********************************************************************** */
 
 /** Builds a control flow graph */
 void cfgraph_build(program *in, cfgraph *out) {
@@ -182,6 +239,10 @@ void cfgraph_build(program *in, cfgraph *out) {
     instructionindx item;
     while (cfgraphbuilder_pop(&bld, &item)) {
         cfgraphbuilder_buildblock(&bld, item);
+    }
+    
+    for (int i=0; i<out->count; i++) {
+        cfgraphbuilder_addmetadata(&bld, &out->data[i]);
     }
     
     cfgraphbuilder_clear(&bld);
