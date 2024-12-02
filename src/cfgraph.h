@@ -21,6 +21,9 @@ typedef struct sblock {
     instructionindx start; /** First instruction in the block */
     instructionindx end; /** Last instruction in the block */
     
+    instructionindx dest[2]; /** Destination blocks */
+    dictionary src; /** Source blocks */
+    
     dictionary uses; /** Registers that the block uses as input */
     dictionary writes; /** Registers that the block writes to */
 } block;
@@ -44,6 +47,9 @@ void block_setuses(block *b, registerindx r);
 void block_setwrites(block *b, registerindx r);
 bool block_uses(block *b, registerindx r);
 bool block_writes(block *b, registerindx r);
+
+void block_setsource(block *b, instructionindx dest);
+void block_setdest(block *b, instructionindx dest);
 
 void cfgraph_init(cfgraph *graph);
 void cfgraph_clear(cfgraph *graph);

@@ -10,6 +10,7 @@
 #define MORPHO_CORE
 #include <morpho/core.h>
 #include <morpho/compile.h>
+#include <morpho/dictionary.h>
 #include <morpho.h>
 
 void bytecodeoptimizer_initialize(void);

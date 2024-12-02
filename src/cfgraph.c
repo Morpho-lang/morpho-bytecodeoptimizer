@@ -4,8 +4,6 @@
  *  @brief Control flow graph
 */
 
-#include <morpho/dictionary.h>
-
 #include "cfgraph.h"
 #include "opcodes.h"
 
@@ -23,12 +21,17 @@ void block_init(block *b) {
     b->start=INSTRUCTIONINDX_EMPTY;
     b->end=INSTRUCTIONINDX_EMPTY;
     
+    b->dest[0]=INSTRUCTIONINDX_EMPTY;
+    b->dest[1]=INSTRUCTIONINDX_EMPTY;
+    
+    dictionary_init(&b->src);
     dictionary_init(&b->uses);
     dictionary_init(&b->writes);
 }
 
 /** Clears a basic block structure */
 void block_clear(block *b) {
+    dictionary_clear(&b->src);
     dictionary_clear(&b->uses);
     dictionary_clear(&b->writes);
 }
@@ -38,19 +41,32 @@ void block_setuses(block *b, registerindx r) {
     dictionary_insert(&b->uses, MORPHO_INTEGER((int) r), MORPHO_NIL);
 }
 
-/** Declare that a block overwrites a given register */
-void block_setwrites(block *b, registerindx r) {
-    dictionary_insert(&b->writes, MORPHO_INTEGER((int) r), MORPHO_NIL);
-}
-
 /** Check if a block uses a given register */
 bool block_uses(block *b, registerindx r) {
     return dictionary_get(&b->uses, MORPHO_INTEGER((int) r), NULL);
 }
 
+/** Declare that a block overwrites a given register */
+void block_setwrites(block *b, registerindx r) {
+    dictionary_insert(&b->writes, MORPHO_INTEGER((int) r), MORPHO_NIL);
+}
+
 /** Check if a block overwrites a given register */
 bool block_writes(block *b, registerindx r) {
     return dictionary_get(&b->writes, MORPHO_INTEGER((int) r), NULL);
+}
+
+/** Sets source blocks */
+void block_setsource(block *b, instructionindx dest) {
+    dictionary_insert(&b->writes, MORPHO_INTEGER((int) dest), MORPHO_NIL);
+}
+
+/** Sets destination blocks */
+void block_setdest(block *b, instructionindx dest) {
+    for (int i=0; i<2; i++) {
+        if (b->dest[i]==INSTRUCTIONINDX_EMPTY) { b->dest[i]=dest; return; }
+    }
+    UNREACHABLE("Too many destinations set from block.");
 }
 
 /* **********************************************************************
