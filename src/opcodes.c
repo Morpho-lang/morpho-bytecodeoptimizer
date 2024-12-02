@@ -46,7 +46,7 @@ void arith_trackingfn(optimizer *opt) {
 
 void cmp_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    optimize_settype(opt, DECODE_A(instr), MORPHO_NIL);
+    optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
 /* **********************************************************************

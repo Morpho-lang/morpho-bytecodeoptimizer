@@ -110,9 +110,28 @@ bool optimize(program *in) {
  * Initialization/Finalization
  * ********************************************************************** */
 
+value Bool_prnt(vm *v, int nargs, value *args) {
+    object_print(v, MORPHO_GETARG(args, 0));
+}
+
+MORPHO_BEGINCLASS(Bool)
+MORPHO_METHOD(MORPHO_PRINT_METHOD, Bool_prnt, MORPHO_FN_FLAGSEMPTY)
+MORPHO_ENDCLASS
+
+value typestring;
+value typebool;
+
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
     opcode_initialize();
+    
+    //objectstring boollabel = MORPHO_STATICSTRING("Bool");
+    //typebool = builtin_findclass(MORPHO_OBJECT(&boollabel));
+    typebool = builtin_addclass("Bool", MORPHO_GETCLASSDEFINITION(Bool), MORPHO_NIL);
+    value_setveneerclass(MORPHO_TRUE, typebool);
+
+    objectstring stringlabel = MORPHO_STATICSTRING("String");
+    typestring = builtin_findclass(MORPHO_OBJECT(&stringlabel));
 }
 
 void bytecodeoptimizer_finalize(void) {

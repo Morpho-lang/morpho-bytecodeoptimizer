@@ -29,6 +29,9 @@ typedef struct {
 /** Function that will be called by the optimizer to set the contents of the register info file */
 typedef void (*opcodetrackingfn) (optimizer *opt);
 
+extern value typestring;
+extern value typebool;
+
 /* **********************************************************************
  * Interface for optimization strategies
  * ********************************************************************** */

@@ -42,14 +42,18 @@ void reginfolist_settype(reginfolist *rlist, int i, value type) {
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
     for (int i=0; i<rlist->nreg; i++) {
-        printf("|\tr%u : ", i);
+        printf("|\tr%u :", i);
         switch (rlist->rinfo[i].contents) {
             case REG_EMPTY: break;
-            case REG_REGISTER: printf("r%td", rlist->rinfo[i].indx); break;
-            case REG_GLOBAL: printf("g%td", rlist->rinfo[i].indx); break;
-            case REG_CONSTANT: printf("c%td", rlist->rinfo[i].indx); break;
-            case REG_UPVALUE: printf("u%td", rlist->rinfo[i].indx); break;
+            case REG_REGISTER: printf(" r%td", rlist->rinfo[i].indx); break;
+            case REG_GLOBAL: printf(" g%td", rlist->rinfo[i].indx); break;
+            case REG_CONSTANT: printf(" c%td", rlist->rinfo[i].indx); break;
+            case REG_UPVALUE: printf(" u%td", rlist->rinfo[i].indx); break;
             default: break;
+        }
+        if (!MORPHO_ISNIL(rlist->rinfo[i].type)) {
+            printf(" ");
+            morpho_printvalue(NULL, rlist->rinfo[i].type);
         }
         printf("\n");
     }
