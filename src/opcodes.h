@@ -30,7 +30,7 @@ typedef unsigned int opcodeflags;
  * ********************************************************************** */
 
 opcodeflags opcode_getflags(instruction opcode);
-opcodeprocessfn opcode_getprocessfn(instruction opcode);
+opcodetrackingfn opcode_gettrackingfn(instruction opcode);
 
 void opcode_initialize(void);
 

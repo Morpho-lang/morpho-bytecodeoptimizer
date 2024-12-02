@@ -18,21 +18,26 @@ typedef struct {
     instruction code;
     char *label;
     opcodeflags flags;
-    opcodeprocessfn processfn;
+    opcodetrackingfn trackingfn;
 } opcodeinfo;
 
 /* **********************************************************************
- * Opcode process functions
+ * Opcode tracking functions
  * ********************************************************************** */
 
-void lct_processfn(optimizer *opt) {
+void lct_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_CONSTANT, DECODE_Bx(instr));
 }
 
-void lgl_processfn(optimizer *opt) {
+void lgl_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
+}
+
+void cmp_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_settype(opt, DECODE_A(instr), MORPHO_NIL);
 }
 
 /* **********************************************************************
@@ -72,8 +77,8 @@ opcodeinfo opcodetable[] = {
     
     { OP_CLOSEUP, "closeup", OPCODE_UNSUPPORTED, NULL },
     
-    { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_processfn },
-    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_processfn },
+    { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn },
+    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn },
     { OP_SGL, "sgl", OPCODE_USES_A, NULL },
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
@@ -99,10 +104,10 @@ opcodeflags opcode_getflags(instruction opcode) {
     return opcodetable[opcode].flags;
 }
 
-/** Gets the processfn associated with a given opcode */
-opcodeprocessfn opcode_getprocessfn(instruction opcode) {
+/** Gets the trackingfn associated with a given opcode */
+opcodetrackingfn opcode_gettrackingfn(instruction opcode) {
     if (opcode>nopcodes) return NULL;
-    return opcodetable[opcode].processfn;
+    return opcodetable[opcode].trackingfn;
 }
 
 /* **********************************************************************

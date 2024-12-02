@@ -27,13 +27,15 @@ typedef struct {
 } optimizer;
 
 /** Function that will be called by the optimizer to set the contents of the register info file */
-typedef void (*opcodeprocessfn) (optimizer *opt);
+typedef void (*opcodetrackingfn) (optimizer *opt);
 
 /* **********************************************************************
  * Interface for optimization strategies
  * ********************************************************************** */
 
 void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx indx);
+void optimize_settype(optimizer *opt, registerindx r, value type);
+
 instruction optimize_getinstruction(optimizer *opt);
 
 #endif

@@ -59,6 +59,10 @@ void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx i
     reginfolist_write(&opt->rlist, opt->pc, r, contents, indx);
 }
 
+void optimize_settype(optimizer *opt, registerindx r, value type) {
+    
+}
+
 /** Callback function to get the current instruction */
 instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
@@ -74,9 +78,9 @@ bool optimize_block(optimizer *opt, block *blk) {
         debugger_disassembleinstruction(NULL, opt->current, i, NULL, NULL);
         printf("\n");
         
-        // Perform processing to track register contents
-        opcodeprocessfn processfn = opcode_getprocessfn(DECODE_OP(opt->current));
-        if (processfn) processfn(opt);
+        // Perform trackinging to track register contents
+        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
+        if (trackingfn) trackingfn(opt);
         
         reginfolist_show(&opt->rlist);
     }
