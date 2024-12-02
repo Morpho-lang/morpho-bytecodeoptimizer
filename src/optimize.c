@@ -64,6 +64,12 @@ void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
 }
 
+/** Callback function to get a constant from the current constant table */
+value optimize_getconstant(optimizer *opt, indx i) {
+    if (i>opt->currentblk->func->konst.count) return MORPHO_NIL;
+    return opt->currentblk->func->konst.data[i];
+}
+
 /** Callback function to get the current instruction */
 instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
@@ -71,6 +77,8 @@ instruction optimize_getinstruction(optimizer *opt) {
 
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
+    opt->currentblk=blk;
+    
     printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
     reginfolist_init(&opt->rlist, blk->func->nregs);
     

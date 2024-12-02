@@ -33,6 +33,12 @@ void mov_trackingfn(optimizer *opt) {
 void lct_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_CONSTANT, DECODE_Bx(instr));
+    
+    value konst, type; // Get the type of the constant
+    konst = optimize_getconstant(opt, DECODE_Bx(instr));
+    if (metafunction_typefromvalue(konst, &type)) {
+        optimize_settype(opt, DECODE_A(instr), type);
+    }
 }
 
 void lgl_trackingfn(optimizer *opt) {

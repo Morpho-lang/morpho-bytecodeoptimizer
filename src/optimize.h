@@ -22,6 +22,7 @@ typedef struct {
 
     reginfolist rlist;
     
+    block *currentblk; 
     instructionindx pc;
     instruction current;
 } optimizer;
@@ -36,8 +37,9 @@ extern value typebool;
  * Interface for optimization strategies
  * ********************************************************************** */
 
-void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx indx);
-void optimize_settype(optimizer *opt, registerindx r, value type);
+void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
+void optimize_settype(optimizer *opt, registerindx i, value type);
+value optimize_getconstant(optimizer *opt, indx i);
 
 instruction optimize_getinstruction(optimizer *opt);
 
