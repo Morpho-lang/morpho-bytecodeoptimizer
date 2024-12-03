@@ -25,6 +25,9 @@ typedef struct {
     block *currentblk; 
     instructionindx pc;
     instruction current;
+    
+    vm *v; /** VM to execute subprograms */
+    program *temp; /** Temporary program structure */
 } optimizer;
 
 /** Function that will be called by the optimizer to set the contents of the register info file */
@@ -39,6 +42,8 @@ extern value typebool;
 
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
 void optimize_settype(optimizer *opt, registerindx i, value type);
+
+bool optimize_typefromvalue(value val, value *type);
 
 value optimize_getconstant(optimizer *opt, indx i);
 bool optimize_addconstant(optimizer *opt, value val, indx *indx);

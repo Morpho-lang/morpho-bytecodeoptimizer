@@ -11,6 +11,7 @@
 #include <morpho/core.h>
 #include <morpho/compile.h>
 #include <morpho/dictionary.h>
+#include <morpho/gc.h>
 #include <morpho.h>
 
 #endif

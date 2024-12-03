@@ -20,11 +20,17 @@ void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, 0);
+    
+    opt->v=morpho_newvm();
+    opt->temp=morpho_newprogram();
 }
 
 /** Clears an optimizer data structure */
 void optimize_clear(optimizer *opt) {
     cfgraph_clear(&opt->graph);
+    
+    if (opt->v) morpho_freevm(opt->v);
+    if (opt->temp) morpho_freeprogram(opt->temp);
 }
 
 /* **********************************************************************
@@ -45,6 +51,11 @@ void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx i
 /** Callback function to set the type of a register */
 void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
+}
+
+/** Wrapper to get the type information from a value */
+bool optimize_typefromvalue(value val, value *type) {
+    return metafunction_typefromvalue(val, type);
 }
 
 /** Callback function to get a constant from the current constant table */

@@ -2,4 +2,4 @@
 
 import bytecodeoptimizer
 
-print 2*2 // expect: 4
+print 2*4 // expect: 4

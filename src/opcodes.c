@@ -36,7 +36,7 @@ void lct_trackingfn(optimizer *opt) {
     
     value konst, type; // Get the type of the constant
     konst = optimize_getconstant(opt, DECODE_Bx(instr));
-    if (metafunction_typefromvalue(konst, &type)) {
+    if (optimize_typefromvalue(konst, &type)) {
         optimize_settype(opt, DECODE_A(instr), type);
     }
 }

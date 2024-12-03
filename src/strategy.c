@@ -7,6 +7,7 @@
 #include "morphocore.h"
 #include "strategy.h"
 #include "optimize.h"
+#include "eval.h"
 
 /* **********************************************************************
  * Local optimization strategies
@@ -59,7 +60,8 @@ bool strategy_constant_folding(optimizer *opt) {
     };
     
     // Evaluate the program
-    value new = MORPHO_INTEGER(255);
+    value new = MORPHO_NIL;
+    if (!optimize_evalsubprogram(opt, ilist, 0, &new)) return false;
     
     // Add the constant to the constant table
     indx nkonst;
@@ -70,6 +72,14 @@ bool strategy_constant_folding(optimizer *opt) {
     
     // Replace the instruction
     optimize_replaceinstruction(opt, ENCODE_LONG(OP_LCT, DECODE_A(instr), (unsigned int) nkonst));
+    
+    // Set the contents of the register
+    optimize_write(opt, DECODE_A(instr), REG_CONSTANT, nkonst);
+    
+    value type;
+    if (optimize_typefromvalue(new, &type)) {
+        optimize_settype(opt, DECODE_A(instr), type);
+    }
     
     return true;
 }
