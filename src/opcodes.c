@@ -28,6 +28,7 @@ typedef struct {
 void mov_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_REGISTER, DECODE_B(instr));
+    optimize_settype(opt, DECODE_A(instr), optimize_type(opt, DECODE_B(instr)));
 }
 
 void lct_trackingfn(optimizer *opt) {

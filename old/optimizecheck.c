@@ -609,38 +609,6 @@ void optimize_buildcontrolflowgraph(optimizer *opt) {
 }
 
 /* **********************************************************************
- * Evaluation using the VM
- * ********************************************************************** */
-
-bool optimize_evaluateprogram(optimizer *opt, instruction *list, registerindx dest, value *out) {
-    bool success=false;
-    objectfunction *storeglobal=opt->temp->global; // Retain the old global function
-    
-    objectfunction temp=*opt->func; // Keep all the function's info, e.g. constant table
-    temp.entry=0;
-    
-    opt->temp->global=&temp; // Patch in our function
-    
-    varray_instruction *code = &opt->temp->code;
-    code->count=0; // Clear the program
-    for (instruction *ins = list; ; ins++) { // Load the list of instructions into the program
-        varray_instructionwrite(code, *ins);
-        if (DECODE_OP(*ins)==OP_END) break;
-    }
-    
-    if (morpho_run(opt->v, opt->temp)) { // Run the program and extract output
-        if (out && dest< opt->v->stack.count) {
-            *out = opt->v->stack.data[dest];
-            if (MORPHO_ISOBJECT(*out)) vm_unbindobject(opt->v, *out);
-        }
-        success=true;
-    }
-    opt->temp->global=storeglobal; // Restore the global function
-    
-    return success;
-}
-
-/* **********************************************************************
  * Optimization strategies
  * ********************************************************************** */
 
@@ -771,44 +739,6 @@ bool optimize_branch_optimization(optimizer *opt) {
     if (sbx==0) {
         optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
         return true;
-    }
-    
-    return false;
-}
-
-/** Folds constants  */
-bool optimize_constant_folding(optimizer *opt) {
-    if (opt->op<OP_ADD || opt->op>OP_LE) return false; // Quickly eliminate non-arithmetic instructions
-    
-    instruction instr=opt->current;
-    indx left, right;
-    
-    bool Bc=optimize_findconstant(opt, DECODE_B(instr), &left);
-    if (!Bc) return false;
-    bool Cc=optimize_findconstant(opt, DECODE_C(instr), &right);
-    
-    if (Cc) {
-        // A program that evaluates the required op with the selected constants.
-        instruction ilist[] = {
-            ENCODE_LONG(OP_LCT, 0, (instruction) left),
-            ENCODE_LONG(OP_LCT, 1, (instruction) right),
-            ENCODE(opt->op, 0, 0, 1),
-            ENCODE_BYTE(OP_END)
-        };
-        
-        value out;
-        
-        if (optimize_evaluateprogram(opt, ilist, 0, &out)) {
-            indx nkonst;
-            //if (MORPHO_ISOBJECT(out)) UNREACHABLE("Optimizer encountered object while constant folding");
-            if (optimize_addconstant(opt, out, &nkonst)) {
-                if (nkonst==19) {
-                    
-                }
-                optimize_replaceinstruction(opt, ENCODE_LONG(OP_LCT, DECODE_A(instr), (unsigned int) nkonst));
-                return true;
-            }
-        }
     }
     
     return false;

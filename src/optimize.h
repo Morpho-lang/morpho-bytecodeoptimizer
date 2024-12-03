@@ -42,7 +42,7 @@ extern value typebool;
 
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
 void optimize_settype(optimizer *opt, registerindx i, value type);
-
+value optimize_type(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);
 
 value optimize_getconstant(optimizer *opt, indx i);

@@ -39,6 +39,12 @@ void reginfolist_settype(reginfolist *rlist, int i, value type) {
     rlist->rinfo[i].type=type;
 }
 
+/** Gets the type associated with a register */
+value reginfolist_type(reginfolist *rlist, int i) {
+    if (i>rlist->nreg) return MORPHO_NIL;
+    return rlist->rinfo[i].type;
+}
+
 /** Sets the type associated with a register */
 bool reginfolist_contents(reginfolist *rlist, int i, regcontents *contents, indx *indx) {
     if (i>rlist->nreg) return false;

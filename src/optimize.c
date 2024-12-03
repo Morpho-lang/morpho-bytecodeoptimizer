@@ -53,6 +53,11 @@ void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
 }
 
+/** Callback function to set the type of a register */
+value optimize_type(optimizer *opt, registerindx r) {
+    return reginfolist_type(&opt->rlist, r);
+}
+
 /** Wrapper to get the type information from a value */
 bool optimize_typefromvalue(value val, value *type) {
     return metafunction_typefromvalue(val, type);

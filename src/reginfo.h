@@ -45,6 +45,7 @@ typedef struct {
 void reginfolist_init(reginfolist *rlist, int nreg);
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx);
 void reginfolist_settype(reginfolist *rlist, int i, value type);
+value reginfolist_type(reginfolist *rlist, int i);
 
 bool reginfolist_contents(reginfolist *rlist, int i, regcontents *contents, indx *indx);
 
