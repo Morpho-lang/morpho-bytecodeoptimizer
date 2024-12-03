@@ -1,0 +1,13 @@
+// While statements
+
+import bytecodeoptimizer
+
+var i = 0
+
+while (i<5) {
+  var a = 2*2+1
+  print i
+  i+=1
+}
+
+print "foo"

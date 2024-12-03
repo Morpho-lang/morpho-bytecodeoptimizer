@@ -106,11 +106,6 @@ void cfgraph_show(cfgraph *graph) {
     }
 }
 
-/** Adds a block to the control flow graph */
-bool cfgraph_addblock(cfgraph *graph, block *blk) {
-    return varray_blockadd(graph, blk, 1);
-}
-
 /** Finds a block with instruction indx that lies within it
  * @param[in] opt - optimizer
  * @param[in] indx - index to find
@@ -135,6 +130,7 @@ bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
 typedef struct {
     program *in;
     cfgraph *out;
+    dictionary blkindx; /** Dictionary of block indices */
     varray_instructionindx worklist;
     objectfunction *currentfn;
 } cfgraphbuilder;
@@ -144,11 +140,13 @@ void cfgraphbuilder_init(cfgraphbuilder *bld, program *in, cfgraph *out) {
     bld->in=in;
     bld->out=out;
     varray_instructionindxinit(&bld->worklist);
+    dictionary_init(&bld->blkindx);
 }
 
 /** Clears an optimizer data structure */
 void cfgraphbuilder_clear(cfgraphbuilder *bld) {
     varray_instructionindxclear(&bld->worklist);
+    dictionary_clear(&bld->blkindx);
 }
 
 /** Adds a block to the worklist */
@@ -179,6 +177,21 @@ void cfgraphbuilder_setcurrentfn(cfgraphbuilder *bld, objectfunction *func) {
 /** Gets the current function */
 objectfunction *cfgraphbuilder_currentfn(cfgraphbuilder *bld) {
     return bld->currentfn;
+}
+
+/** Lookup a block from a given block index  */
+bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, indx start, indx *out) {
+    value val;
+    bool success = dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), &val);
+    if (success && out) *out = MORPHO_GETINTEGERVALUE(val);
+    return success;
+}
+
+/** Adds a block to the control flow graph */
+bool cfgraphbuilder_addblock(cfgraphbuilder *bld, block *blk) {
+    bool success=varray_blockadd(bld->out, blk, 1);
+    dictionary_insert(&bld->blkindx, MORPHO_INTEGER(blk->start), MORPHO_INTEGER(bld->out->count-1));
+    return success;
 }
 
 /* **********************************************************************
@@ -219,7 +232,8 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     blk.start=start;
     blk.func=cfgraphbuilder_currentfn(bld);
     
-    for (instructionindx i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
+    instructionindx i;
+    for (i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
@@ -232,16 +246,16 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
             cfgraphbuilder_branchto(bld, i+1+branchby);
         }
 
-        // At a block ending instruction record the end point and terminate
-        if (flags & OPCODE_ENDSBLOCK) {
-            blk.end=i;
-            break;
-        }
+        // Terminate at a block ending instruction
+        if (flags & OPCODE_ENDSBLOCK) break;
         
-        // Should also check that we don't run into an existing block
+        // Check if we have reached the start of an existing block
+        if (cfgraphbuilder_lookupblock(bld, i+1, NULL)) break;
     }
-    
-    cfgraph_addblock(bld->out, &blk);
+        
+    blk.end=i; // Record end point
+        
+    cfgraphbuilder_addblock(bld, &blk);
 }
 
 /** Determines which registers a block uses and writes to */

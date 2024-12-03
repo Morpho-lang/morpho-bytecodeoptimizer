@@ -1,0 +1,50 @@
+// Functions 
+
+import bytecodeoptimizer
+
+fn foo (x) {
+  var a = x+1 
+  return x
+}
+
+fn boo () {
+  print "I'm not used"
+}
+
+
+var b = 2*4
+print foo(2)
+
+/* TODO list: 
+
+1) Multi-pass optimization
+2) Functions <- challenging [DONE!]
+3) Methods 
+4) More optimization strategies
+
+[0]  0 : b 3
+
+fn foo:
+     1 : add r2, r1, c0           ; c0=1
+     2 : return r1                ; 
+     3 : return r0                ; 
+
+[1]  4 : lct r0, c0               ; c0=<fn foo> 
+     5 : sgl r0, g0               ; 
+     6 : b 2
+
+fn boo:
+     7 : print c0                 ; c0=I'm not used 
+     8 : return r0                ; 
+
+[2]  9 : lct r0, c1               ; c1=<fn boo> 
+    10 : sgl r0, g1               ; 
+    11 : mul r0, c2, c3           ; c2=2 c3=4
+    12 : sgl r0, g2               ; 
+    13 : lgl r0, g0               ; 
+    14 : lct r1, c2               ; c2=2 
+    15 : call r0, 1               ; 
+    16 : print r0                 ; 
+    17 : end 
+
+*/

@@ -1,0 +1,10 @@
+// For...in statements
+
+import bytecodeoptimizer
+
+for (i in 1..4) {
+  var a = 2*i 
+  print a
+}
+
+

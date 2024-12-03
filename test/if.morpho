@@ -1,0 +1,15 @@
+// If statements
+
+import bytecodeoptimizer
+
+var a = random()
+
+if (a<0.5) {
+  var b = (1+a)*(1+a)
+  print b
+} else {
+  var c = 2*2 
+  print c
+}
+
+print "foo"
