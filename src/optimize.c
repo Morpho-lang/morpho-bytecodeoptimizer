@@ -112,29 +112,35 @@ instruction optimize_getinstruction(optimizer *opt) {
 /** Callback function to get the current instruction */
 void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     opt->current=opt->prog->code.data[opt->pc]=instr;
+    opt->nchanged++;
 }
 
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
     opt->currentblk=blk;
     
-    printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
-    reginfolist_init(&opt->rlist, blk->func->nregs);
+    do {
+        opt->nchanged=0;
+        
+        printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
+        reginfolist_init(&opt->rlist, blk->func->nregs);
+        
+        for (instructionindx i=blk->start; i<=blk->end; i++) {
+            optimize_fetch(opt, i);
+            debugger_disassembleinstruction(NULL, opt->current, i, NULL, NULL);
+            printf("\n");
+            
+            // Perform tracking to track register contents
+            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
+            if (trackingfn) trackingfn(opt);
+            
+            // Apply relevant optimization strategies
+            strategy_optimizeinstruction(opt, 0);
+            
+            reginfolist_show(&opt->rlist);
+        }
+    } while (opt->nchanged>0);
     
-    for (instructionindx i=blk->start; i<=blk->end; i++) {
-        optimize_fetch(opt, i);
-        debugger_disassembleinstruction(NULL, opt->current, i, NULL, NULL);
-        printf("\n");
-        
-        // Perform trackinging to track register contents
-        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
-        if (trackingfn) trackingfn(opt);
-        
-        // Apply relevant optimization strategies
-        strategy_optimizeinstruction(opt, 0);
-        
-        reginfolist_show(&opt->rlist);
-    }
     return true;
 }
 

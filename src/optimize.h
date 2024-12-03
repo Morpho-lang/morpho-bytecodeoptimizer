@@ -25,6 +25,7 @@ typedef struct {
     block *currentblk; 
     instructionindx pc;
     instruction current;
+    int nchanged; /** Number of instructions changed in this pass */
     
     vm *v; /** VM to execute subprograms */
     program *temp; /** Temporary program structure */

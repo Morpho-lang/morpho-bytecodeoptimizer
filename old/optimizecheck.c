@@ -820,16 +820,6 @@ optimizationstrategy secondpass[] = {
     { OP_LAST, NULL }
 };
 
-/** Apply optimization strategies to the current instruction */
-void optimize_optimizeinstruction(optimizer *opt, optimizationstrategy *strategies) {
-    if (opt->op==OP_NOP) return;
-    for (optimizationstrategy *s = strategies; s->match!=OP_LAST; s++) {
-        if (s->match==OP_ANY || s->match==opt->op) {
-            if ((*s->fn) (opt)) return;
-        }
-    }
-}
-
 /* **********************************************************************
  * Optimize a block
  * ********************************************************************** */
