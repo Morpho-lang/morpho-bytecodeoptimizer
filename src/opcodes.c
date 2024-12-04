@@ -56,6 +56,11 @@ void cmp_trackingfn(optimizer *opt) {
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
+void cat_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_settype(opt, DECODE_A(instr), typestring);
+}
+
 /* **********************************************************************
  * Opcode definition table
  * ********************************************************************** */
@@ -109,7 +114,7 @@ opcodeinfo opcodetable[] = {
     
     { OP_BREAK, "break", OPCODE_BLANK, NULL },
     
-    { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC, NULL },
+    { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC, cat_trackingfn },
     
     { OP_END, "end", OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL }
 };

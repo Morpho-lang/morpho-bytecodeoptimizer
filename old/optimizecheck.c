@@ -100,15 +100,6 @@ bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, i
  * Reginfo
  * ----------- */
 
-/** Indicates an instruction uses a register */
-void optimize_reguse(optimizer *opt, registerindx reg) {
-    //if (opt->reg[reg].contains==NOTHING) printf("Unresolved reference in reg %u.\n", reg);
-    if (opt->reg[reg].block!=CODEBLOCKDEST_EMPTY && opt->reg[reg].block!=optimize_getcurrentblock(opt)) {
-        optimize_retaininparents(opt, reg);
-    }
-    opt->reg[reg].used++;
-}
-
 /** Invalidates any old copies of a stored quantity */
 void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
     for (unsigned int i=0; i<opt->maxreg; i++) {
@@ -134,19 +125,6 @@ void optimize_resolvearithmetictype(optimizer *opt) {
     }
     
     optimize_regsettype(opt, a, ta);
-}
-
-/** Gets the type of value in a register if known */
-value optimize_getregtype(optimizer *opt, registerindx reg) {
-    return opt->reg[reg].type;
-}
-
-/** Indicates an instruction overwrites a register */
-void optimize_regoverwrite(optimizer *opt, registerindx reg) {
-    optimize_regsettype(opt, reg, MORPHO_NIL);
-    optimize_reginvalidate(opt, REGISTER, reg); // Invalidate any aliases of this register
-    opt->overwriteprev=opt->reg[reg];
-    opt->overwrites=reg;
 }
 
 /* ------------
@@ -295,108 +273,108 @@ void optimize_track(optimizer *opt) {
         case OP_CLOSEUP:
             break;
         case OP_MOV:
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), REGISTER, DECODE_B(instr));
-            optimize_regsettype(opt, DECODE_A(instr), optimize_getregtype(opt, DECODE_B(instr)));
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), REGISTER, DECODE_B(instr));
+            //optimize_regsettype(opt, DECODE_A(instr), optimize_getregtype(opt, DECODE_B(instr)));
             break;
         case OP_LCT:
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), CONSTANT, DECODE_Bx(instr));
-            if (opt->func && DECODE_Bx(instr)<opt->func->konst.count) {
-                value k = opt->func->konst.data[DECODE_Bx(instr)];
-                optimize_regsettype(opt, DECODE_A(instr), k);
-            }
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), CONSTANT, DECODE_Bx(instr));
+            //if (opt->func && DECODE_Bx(instr)<opt->func->konst.count) {
+            //    value k = opt->func->konst.data[DECODE_Bx(instr)];
+            //    optimize_regsettype(opt, DECODE_A(instr), k);
+            //}
             break;
         case OP_ADD:
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
         case OP_POW:
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_reguse(opt, DECODE_C(instr));
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_reguse(opt, DECODE_C(instr));
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
             optimize_resolvearithmetictype(opt);
             break;
         case OP_EQ:
         case OP_NEQ:
         case OP_LT:
         case OP_LE:
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_reguse(opt, DECODE_C(instr));
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-            optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_reguse(opt, DECODE_C(instr));
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
             break;
         case OP_NOT:
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-            optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
             break;
         case OP_BIF:
         case OP_BIFF:
-            optimize_reguse(opt, DECODE_A(instr));
+            //optimize_reguse(opt, DECODE_A(instr));
             break;
         case OP_CALL:
         {
-            registerindx a = DECODE_A(instr);
-            registerindx b = DECODE_B(instr);
-            optimize_reguse(opt, a);
-            for (unsigned int i=0; i<b; i++) {
-                optimize_reguse(opt, a+i+1);
-                opt->reg[a+i+1].contains=NOTHING; // call uses and overwrites arguments.
-            }
-            optimize_regoverwrite(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //registerindx a = DECODE_A(instr);
+            //registerindx b = DECODE_B(instr);
+            //optimize_reguse(opt, a);
+            //for (unsigned int i=0; i<b; i++) {
+            //    optimize_reguse(opt, a+i+1);
+            //    opt->reg[a+i+1].contains=NOTHING; // call uses and overwrites arguments.
+            //}
+            //optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
         }
             break;
         case OP_INVOKE:
         {
-            registerindx a = DECODE_A(instr);
-            registerindx b = DECODE_B(instr);
-            registerindx c = DECODE_C(instr);
-            optimize_reguse(opt, a);
-            optimize_reguse(opt, b);
-            for (unsigned int i=0; i<c; i++) {
-                optimize_reguse(opt, a+i+1);
-                opt->reg[a+i+1].contains=NOTHING; // invoke uses and overwrites arguments.
-            }
-            optimize_regoverwrite(opt, a);
-            optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
+            //registerindx a = DECODE_A(instr);
+            //registerindx b = DECODE_B(instr);
+            //registerindx c = DECODE_C(instr);
+            //optimize_reguse(opt, a);
+            //optimize_reguse(opt, b);
+            //for (unsigned int i=0; i<c; i++) {
+            //    optimize_reguse(opt, a+i+1);
+            //    opt->reg[a+i+1].contains=NOTHING; // invoke uses and overwrites arguments.
+            //}
+            //optimize_regoverwrite(opt, a);
+            //optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         case OP_RETURN:
-            if (DECODE_A(instr)>0) optimize_reguse(opt, DECODE_B(instr));
+            //if (DECODE_A(instr)>0) optimize_reguse(opt, DECODE_B(instr));
             break;
         case OP_LGL:
         {
-            registerindx a = DECODE_A(instr);
-            optimize_regoverwrite(opt, a);
+            //registerindx a = DECODE_A(instr);
+            //optimize_regoverwrite(opt, a);
             optimize_useglobal(opt, DECODE_Bx(instr));
-            optimize_regcontents(opt, a, GLOBAL, DECODE_Bx(instr));
+            //optimize_regcontents(opt, a, GLOBAL, DECODE_Bx(instr));
             optimize_regsettype(opt, DECODE_A(instr), optimize_getglobaltype(opt, DECODE_Bx(instr)));
         }
             break;
         case OP_SGL:
             optimize_reginvalidate(opt, GLOBAL, DECODE_Bx(instr));
-            optimize_reguse(opt, DECODE_A(instr));
-            optimize_regcontents(opt, DECODE_A(instr), GLOBAL, DECODE_Bx(instr));
+            //optimize_reguse(opt, DECODE_A(instr));
+            //optimize_regcontents(opt, DECODE_A(instr), GLOBAL, DECODE_Bx(instr));
             break;
         case OP_LPR:
         {
-            registerindx a = DECODE_A(instr);
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_reguse(opt, DECODE_C(instr));
+            //registerindx a = DECODE_A(instr);
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_reguse(opt, DECODE_C(instr));
             optimize_regoverwrite(opt, a);
             optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         case OP_SPR:
-            optimize_reguse(opt, DECODE_A(instr));
-            optimize_reguse(opt, DECODE_B(instr));
-            optimize_reguse(opt, DECODE_C(instr));
+            //optimize_reguse(opt, DECODE_A(instr));
+            //optimize_reguse(opt, DECODE_B(instr));
+            //optimize_reguse(opt, DECODE_C(instr));
             break;
         case OP_CLOSURE:
         {
@@ -421,65 +399,37 @@ void optimize_track(optimizer *opt) {
             registerindx a=DECODE_A(instr);
             registerindx b=DECODE_B(instr);
             registerindx c=DECODE_C(instr);
-            optimize_reguse(opt, a);
-            for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
+            //optimize_reguse(opt, a);
+            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
             optimize_regoverwrite(opt, b);
             optimize_regcontents(opt, b, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         case OP_SIX:
         {
-            registerindx a=DECODE_A(instr);
-            registerindx b=DECODE_B(instr);
-            registerindx c=DECODE_C(instr);
-            optimize_reguse(opt, a);
-            for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
+            //registerindx a=DECODE_A(instr);
+            //registerindx b=DECODE_B(instr);
+            //registerindx c=DECODE_C(instr);
+            //optimize_reguse(opt, a);
+            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
         }
             break;
         case OP_PRINT:
-            optimize_reguse(opt, DECODE_A(instr));
+            //optimize_reguse(opt, DECODE_A(instr));
             break;
         case OP_CAT:
         {
-            registerindx a=DECODE_A(instr);
-            registerindx b=DECODE_B(instr);
-            registerindx c=DECODE_C(instr);
-            for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
-            optimize_regoverwrite(opt, a);
-            optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
+            //registerindx a=DECODE_A(instr);
+            //registerindx b=DECODE_B(instr);
+            //registerindx c=DECODE_C(instr);
+            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
+            //optimize_regoverwrite(opt, a);
+            //optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         default:
             UNREACHABLE("Opcode not supported in optimizer.");
     }
-}
-
-/* Replaces an unused instruction */
-void optimize_replaceunused(optimizer *opt, reginfo *reg) {
-    if (reg->iix!=INSTRUCTIONINDX_EMPTY) {
-        instruction op = DECODE_OP(optimize_fetchinstructionat(opt, reg->iix));
-        if (op==OP_INVOKE || op==OP_CALL) return;
-        
-        optimize_replaceinstructionat(opt, reg->iix, ENCODE_BYTE(OP_NOP));
-    }
-}
-
-/** Process overwrite */
-void optimize_overwrite(optimizer *opt, bool detectunused) {
-    if (opt->overwrites==REGISTER_UNALLOCATED) return;
-    
-    // Detect unused expression
-    if (detectunused && opt->overwriteprev.contains==CONSTANT &&
-        opt->overwriteprev.used==0 &&
-        opt->overwriteprev.block==optimize_getcurrentblock(opt)) {
-        
-        // We need to type check this!
-        optimize_replaceunused(opt, &opt->reg[opt->overwrites]);
-    }
-    
-    opt->reg[opt->overwrites].used=0;
-    opt->reg[opt->overwrites].iix=optimizer_currentindx(opt);
-    opt->reg[opt->overwrites].block=optimize_getcurrentblock(opt);
 }
 
 /* **********************************************************************
@@ -509,18 +459,18 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
             case OP_B:
             case OP_POPERR:
             {
-                int branchby = DECODE_sBx(opt->current);
-                optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
+                //int branchby = DECODE_sBx(opt->current);
+                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
             }
                 return; // Terminate current block
             case OP_BIF:
             case OP_BIFF:
             {
-                int branchby = DECODE_sBx(opt->current);
+                //int branchby = DECODE_sBx(opt->current);
                 
                 // Create two new blocks, one for each possible destination
-                optimize_branchto(opt, block, optimizer_currentindx(opt)+1, worklist);
-                optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
+                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1, worklist);
+                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
             }
                 return; // Terminate current block
             case OP_PUSHERR:
@@ -581,31 +531,6 @@ void optimize_rootblock(optimizer *opt, varray_codeblockindx *worklist) {
         
         optimize_buildblock(opt, current, worklist);
     }
-}
-
-/** Builds the control flow graph from the source */
-void optimize_buildcontrolflowgraph(optimizer *opt) {
-    varray_codeblockindx worklist; // Worklist of blocks to analyze
-    varray_codeblockindxinit(&worklist);
-    
-    optimize_addfunction(opt, MORPHO_OBJECT(opt->out->global)); // Add the global function
-    
-    // Now build the blocks for each function in the table
-    for (unsigned int i=0; i<opt->functions.capacity; i++) {
-        value func=opt->functions.contents[i].key;
-        if (MORPHO_ISFUNCTION(func)) {
-            optimize_setfunction(opt, MORPHO_GETFUNCTION(func));
-            optimize_rootblock(opt, &worklist);
-        }
-    }
-    
-    varray_codeblockindxclear(&worklist);
-    
-    optimize_addsrcrefs(opt);
-    
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-    optimize_showcodeblocks(opt);
-#endif
 }
 
 /* **********************************************************************
@@ -686,24 +611,6 @@ bool optimize_register_replacement(optimizer *opt) {
     return false; // This allows other optimization strategies to intervene after
 }
 
-/* Check if a register is overwritten between two instructions */
-bool optimize_checkoverwites(optimizer *opt, instructionindx start, instructionindx end, int nregisters, registerindx *reg) {
-    bool result=true;
-    optimizer temp = *opt; /* Preserve the optimizer state */
-    
-    optimize_moveto(opt, start);
-    while (optimizer_currentindx(opt)<end && result) {
-        optimize_advance(opt);
-        optimize_fetch(opt);
-        optimize_track(opt);
-        for (unsigned int i=0; i<nregisters; i++) if (reg[i]==opt->overwrites) {
-            result=false; break;
-        }
-    }
-    
-    *opt = temp; /* Restore the optimizer state */
-    return result;
-}
 
 /** Searches to see if an expression has already been calculated  */
 bool optimize_subexpression_elimination(optimizer *opt) {
@@ -824,14 +731,6 @@ optimizationstrategy secondpass[] = {
  * Optimize a block
  * ********************************************************************** */
 
-void optimize_showregisterstateforblock(optimizer *opt, codeblockindx handle) {
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-    codeblock *block = optimize_getblock(opt, handle);
-    printf("Register state from block %u\n", handle);
-    optimize_showreginfo(block->nreg, block->reg);
-#endif
-}
-
 /** Restores register info from the parents of a block */
 void optimize_restoreregisterstate(optimizer *opt, codeblockindx handle) {
     codeblock *block = optimize_getblock(opt, handle);
@@ -875,20 +774,6 @@ void optimize_restoreregisterstate(optimizer *opt, codeblockindx handle) {
         printf("Combined register state:\n");
         optimize_regshow(opt);
 #endif
-}
-
-/** Prints the code in a block */
-void optimize_printblock(optimizer *opt, codeblockindx block) {
-    instructionindx start=optimize_getstart(opt, block),
-                    end=optimize_getend(opt, block);
-    optimize_restart(opt, start);
-    for (;
-        optimizer_currentindx(opt)<=end;
-        optimize_advance(opt)) {
-        optimize_fetch(opt);
-        debug_disassembleinstruction(opt->current, optimizer_currentindx(opt), NULL, NULL);
-        printf("\n");
-    }
 }
 
 /** Optimize a block */
