@@ -279,6 +279,12 @@ void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
             !block_writes(blk, DECODE_C(instr))) {
             block_setuses(blk, DECODE_C(instr));
         }
+        
+        if (flags & OPCODE_USES_RANGEBC) {
+            for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) {
+                if (!block_writes(blk, i)) block_setuses(blk, i);
+            }
+        }
     }
 }
 

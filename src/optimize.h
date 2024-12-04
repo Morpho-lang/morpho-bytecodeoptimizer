@@ -53,4 +53,6 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
 instruction optimize_getinstruction(optimizer *opt);
 void optimize_replaceinstruction(optimizer *opt, instruction instr);
 
+void optimize_disassemble(optimizer *opt);
+
 #endif

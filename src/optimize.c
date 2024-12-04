@@ -37,10 +37,10 @@ void optimize_clear(optimizer *opt) {
  * Optimize a code block
  * ********************************************************************** */
 
-/** Fetches the instruction at index i */
-void optimize_fetch(optimizer *opt, instructionindx i) {
+/** Fetches the instruction at index i and sets this as the current instruction */
+instruction optimize_fetch(optimizer *opt, instructionindx i) {
     opt->pc=i;
-    opt->current=opt->prog->code.data[i];
+    return opt->current=opt->prog->code.data[i];
 }
 
 /** Callback function to set the contents of a register */
@@ -113,6 +113,26 @@ instruction optimize_getinstruction(optimizer *opt) {
 void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     opt->current=opt->prog->code.data[opt->pc]=instr;
     opt->nchanged++;
+    optimize_disassemble(opt);
+}
+
+void optimize_usage(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    
+    if (flags & OPCODE_USES_A) reginfolist_uses(&opt->rlist, DECODE_A(instr));
+    if (flags & OPCODE_USES_B) reginfolist_uses(&opt->rlist, DECODE_B(instr));
+    if (flags & OPCODE_USES_C) reginfolist_uses(&opt->rlist, DECODE_C(instr));
+    if (flags & OPCODE_USES_RANGEBC) {
+        for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) reginfolist_uses(&opt->rlist, i);
+    }
+}
+
+/** Disassembles the current instruction */
+void optimize_disassemble(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    debugger_disassembleinstruction(NULL, instr, opt->pc, NULL, NULL);
+    printf("\n");
 }
 
 /** Optimize a given block */
@@ -126,16 +146,18 @@ bool optimize_block(optimizer *opt, block *blk) {
         reginfolist_init(&opt->rlist, blk->func->nregs);
         
         for (instructionindx i=blk->start; i<=blk->end; i++) {
-            optimize_fetch(opt, i);
-            debugger_disassembleinstruction(NULL, opt->current, i, NULL, NULL);
-            printf("\n");
-            
-            // Perform tracking to track register contents
-            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
-            if (trackingfn) trackingfn(opt);
+            instruction instr = optimize_fetch(opt, i);
+            optimize_disassemble(opt);
             
             // Apply relevant optimization strategies
             strategy_optimizeinstruction(opt, 0);
+            
+            // Perform tracking to track register contents
+            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(instr));
+            if (trackingfn) trackingfn(opt);
+            
+            // Update usage
+            optimize_usage(opt);
             
             reginfolist_show(&opt->rlist);
         }

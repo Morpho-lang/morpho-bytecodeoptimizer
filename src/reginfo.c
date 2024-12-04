@@ -45,7 +45,12 @@ value reginfolist_type(reginfolist *rlist, int i) {
     return rlist->rinfo[i].type;
 }
 
-/** Sets the type associated with a register */
+/** Adds one to the usage counter for register i */
+void reginfolist_uses(reginfolist *rlist, int i) {
+    rlist->rinfo[i].nused++;
+}
+
+/** Gets the content type associated with a register */
 bool reginfolist_contents(reginfolist *rlist, int i, regcontents *contents, indx *indx) {
     if (i>rlist->nreg) return false;
     if (contents) *contents = rlist->rinfo[i].contents;
@@ -65,6 +70,7 @@ void reginfolist_show(reginfolist *rlist) {
             case REG_UPVALUE: printf(" u%td", rlist->rinfo[i].indx); break;
             default: break;
         }
+        printf(" (%i)", rlist->rinfo[i].nused);
         if (!MORPHO_ISNIL(rlist->rinfo[i].type)) {
             printf(" ");
             morpho_printvalue(NULL, rlist->rinfo[i].type);
