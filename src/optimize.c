@@ -92,6 +92,13 @@ bool optimize_addconstant(optimizer *opt, value val, indx *out) {
     return true;
 }
 
+/** Checks if a register is empty */
+bool optimize_isempty(optimizer *opt, registerindx i) {
+    regcontents contents=REG_EMPTY;
+    reginfolist_contents(&opt->rlist, i, &contents, NULL);
+    return (contents==REG_EMPTY);
+}
+
 /** Checks if a register holds a constant */
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     regcontents contents=REG_EMPTY;
@@ -104,9 +111,23 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     return success;
 }
 
+/** Extracts usage information */
+int optimize_countuses(optimizer *opt, registerindx i) {
+    return reginfolist_countuses(&opt->rlist, i);
+}
+
+bool optimize_source(optimizer *opt, registerindx i, instructionindx *indx) {
+    return reginfolist_source(&opt->rlist, i, indx);
+}
+
 /** Callback function to get the current instruction */
 instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
+}
+
+/** Gets the instruction at a given index; doesn't set this as the current instruction */
+instruction optimize_getinstructionat(optimizer *opt, instructionindx i) {
+    return opt->prog->code.data[i];
 }
 
 /** Callback function to get the current instruction */
@@ -116,6 +137,26 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     optimize_disassemble(opt);
 }
 
+/** Callback function to get the current instruction */
+void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
+    opt->prog->code.data[i]=instr;
+    opt->nchanged++;
+}
+
+/** Attempts to delete an instruction. Checks to see if the instruction has side effects and ignores the deletion if it does.
+    Returns true if the instruction was deleted */
+bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
+    instruction instr = optimize_getinstructionat(opt, indx);
+    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    
+    // Check for side effects
+    if (flags & OPCODE_SIDEEFFECTS) return false; // Todo: Check whether an instruction with potential side effects could still be safe.
+    
+    optimize_replaceinstructionat(opt, indx, ENCODE_BYTE(OP_NOP));
+    return true;
+}
+
+/** Updates reginfo usage information based on the opcode*/
 void optimize_usage(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));

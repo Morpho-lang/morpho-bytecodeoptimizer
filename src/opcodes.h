@@ -24,6 +24,7 @@ typedef unsigned int opcodeflags;
 #define OPCODE_BRANCH           (1<<8)
 #define OPCODE_CONDITIONAL      (1<<9)
 #define OPCODE_TERMINATING      (1<<10)
+#define OPCODE_SIDEEFFECTS      (1<<10)
 
 /* **********************************************************************
  * Interface

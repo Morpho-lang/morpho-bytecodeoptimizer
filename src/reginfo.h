@@ -44,11 +44,13 @@ typedef struct {
 
 void reginfolist_init(reginfolist *rlist, int nreg);
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx);
-void reginfolist_settype(reginfolist *rlist, int i, value type);
-value reginfolist_type(reginfolist *rlist, int i);
-void reginfolist_uses(reginfolist *rlist, int i);
+void reginfolist_settype(reginfolist *rlist, int rindx, value type);
+void reginfolist_uses(reginfolist *rlist, int rindx);
 
-bool reginfolist_contents(reginfolist *rlist, int i, regcontents *contents, indx *indx);
+value reginfolist_type(reginfolist *rlist, int rindx);
+bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, indx *indx);
+bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx);
+int reginfolist_countuses(reginfolist *rlist, int rindx);
 
 void reginfolist_show(reginfolist *rlist);
 

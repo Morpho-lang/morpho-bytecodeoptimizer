@@ -8,6 +8,7 @@
 #include "strategy.h"
 #include "optimize.h"
 #include "eval.h"
+#include "opcodes.h"
 
 /* **********************************************************************
  * Local optimization strategies
@@ -84,14 +85,38 @@ bool strategy_constant_folding(optimizer *opt) {
     return true;
 }
 
+/* -------------------------------------
+ * Dead store elimination
+ * ------------------------------------- */
+
+bool strategy_dead_store_elimination(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    
+    // Return quickly if this instruction doesn't overrwrite
+    if (!(flags & (OPCODE_OVERWRITES_A | OPCODE_OVERWRITES_B))) return false;
+    
+    registerindx r = (flags & OPCODE_OVERWRITES_A ? DECODE_A(instr) : DECODE_Bx(instr));
+    bool success=false;
+    
+    instructionindx iindx;
+    if (!optimize_isempty(opt, r) &&
+        optimize_countuses(opt, r)==0 &&
+        optimize_source(opt, r, &iindx)) {
+        success=optimize_deleteinstruction(opt, iindx);
+    }
+    return success;
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
 
 optimizationstrategy strategies[] = {
-    { OP_ANY, strategy_constant_folding, 0 },
-    { OP_POW, strategy_power_reduction,  0 },
-    { OP_END, NULL,                      0 }
+    { OP_ANY, strategy_constant_folding,       0 },
+    { OP_ANY, strategy_dead_store_elimination, 0 },
+    { OP_POW, strategy_power_reduction,        0 },
+    { OP_END, NULL,                            0 }
 };
 
 /* **********************************************************************

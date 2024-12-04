@@ -24,38 +24,52 @@ void reginfolist_init(reginfolist *rlist, int nreg) {
 }
 
 /** Writes a value to a register */
-void reginfolist_write(reginfolist *rlist, instructionindx iindx, int i, regcontents contents, indx indx) {
-    if (i>rlist->nreg) return;
-    rlist->rinfo[i].contents=contents;
-    rlist->rinfo[i].indx=indx;
-    rlist->rinfo[i].nused=0;
-    rlist->rinfo[i].iindx=iindx;
-    rlist->rinfo[i].type=MORPHO_NIL;
+void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx) {
+    if (rindx>rlist->nreg) return;
+    rlist->rinfo[rindx].contents=contents;
+    rlist->rinfo[rindx].indx=indx;
+    rlist->rinfo[rindx].nused=0;
+    rlist->rinfo[rindx].iindx=iindx;
+    rlist->rinfo[rindx].type=MORPHO_NIL;
 }
 
 /** Sets the type associated with a register */
-void reginfolist_settype(reginfolist *rlist, int i, value type) {
-    if (i>rlist->nreg) return;
-    rlist->rinfo[i].type=type;
+void reginfolist_settype(reginfolist *rlist, int rindx, value type) {
+    if (rindx>rlist->nreg) return;
+    rlist->rinfo[rindx].type=type;
 }
 
 /** Gets the type associated with a register */
-value reginfolist_type(reginfolist *rlist, int i) {
-    if (i>rlist->nreg) return MORPHO_NIL;
-    return rlist->rinfo[i].type;
+value reginfolist_type(reginfolist *rlist, int rindx) {
+    if (rindx>rlist->nreg) return MORPHO_NIL;
+    return rlist->rinfo[rindx].type;
 }
 
 /** Adds one to the usage counter for register i */
-void reginfolist_uses(reginfolist *rlist, int i) {
-    rlist->rinfo[i].nused++;
+void reginfolist_uses(reginfolist *rlist, int rindx) {
+    if (rindx>rlist->nreg) return;
+    rlist->rinfo[rindx].nused++;
 }
 
 /** Gets the content type associated with a register */
-bool reginfolist_contents(reginfolist *rlist, int i, regcontents *contents, indx *indx) {
-    if (i>rlist->nreg) return false;
-    if (contents) *contents = rlist->rinfo[i].contents;
-    if (indx) *indx = rlist->rinfo[i].indx;
+bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, indx *indx) {
+    if (rindx>rlist->nreg) return false;
+    if (contents) *contents = rlist->rinfo[rindx].contents;
+    if (indx) *indx = rlist->rinfo[rindx].indx;
     return true;
+}
+
+/** Gets the instruction responsible for writing to this store */
+bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx) {
+    if (rindx>rlist->nreg) return false;
+    if (iindx) *iindx = rlist->rinfo[rindx].iindx;
+    return true;
+}
+
+/** Count the number of times a register is used */
+int reginfolist_countuses(reginfolist *rlist, int rindx) {
+    if (rindx>rlist->nreg) return 0;
+    return rlist->rinfo[rindx].nused;
 }
 
 /** Display the register info list */
@@ -70,11 +84,18 @@ void reginfolist_show(reginfolist *rlist) {
             case REG_UPVALUE: printf(" u%td", rlist->rinfo[i].indx); break;
             default: break;
         }
-        printf(" (%i)", rlist->rinfo[i].nused);
-        if (!MORPHO_ISNIL(rlist->rinfo[i].type)) {
+        
+        if (!MORPHO_ISNIL(rlist->rinfo[i].type)) { // Type
             printf(" ");
             morpho_printvalue(NULL, rlist->rinfo[i].type);
         }
+        
+        printf(" u:%i", rlist->rinfo[i].nused); // Usage
+        
+        if (rlist->rinfo[i].contents!=REG_EMPTY) { // Who wrote it?
+            printf(" w:%i", (int) rlist->rinfo[i].iindx);
+        }
+        
         printf("\n");
     }
 }
