@@ -392,16 +392,16 @@ void optimize_track(optimizer *opt) {
             optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
             break;
         case OP_SUP:
-            optimize_reguse(opt, DECODE_B(instr));
+            //optimize_reguse(opt, DECODE_B(instr));
             break;
         case OP_LIX:
         {
-            registerindx a=DECODE_A(instr);
-            registerindx b=DECODE_B(instr);
-            registerindx c=DECODE_C(instr);
+            //registerindx a=DECODE_A(instr);
+            //registerindx b=DECODE_B(instr);
+            //registerindx c=DECODE_C(instr);
             //optimize_reguse(opt, a);
             //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
-            optimize_regoverwrite(opt, b);
+            //optimize_regoverwrite(opt, b);
             optimize_regcontents(opt, b, VALUE, REGISTER_UNALLOCATED);
         }
             break;
@@ -847,82 +847,12 @@ void optimize_fixpusherr(optimizer *opt, codeblock *block, varray_instruction *d
     }
 }
 
-/** Fix branch instructions */
-void optimize_fixbranch(optimizer *opt, codeblock *block, varray_instruction *dest) {
-    if (block->oend<block->ostart) return;
-    instruction last = dest->data[block->oend];
-    
-    if (DECODE_OP(last)==OP_B || DECODE_OP(last)==OP_POPERR) {
-        codeblock *destblock = optimize_getblock(opt, block->dest[0]);
-        dest->data[block->oend] = ENCODE_LONG(DECODE_OP(last), REGISTER_UNALLOCATED, destblock->ostart - block->oend - 1);
-    } else if (DECODE_OP(last)==OP_BIF || DECODE_OP(last)==OP_BIFF) {
-        if (block->dest[1]==INSTRUCTIONINDX_EMPTY) UNREACHABLE("Branch to unknown block");
-        codeblock *destblock = optimize_getblock(opt, block->dest[1]);
-        dest->data[block->oend] = ENCODE_LONG(DECODE_OP(last), DECODE_A(last), destblock->ostart - block->oend-1);
-    } else if (DECODE_OP(last)==OP_PUSHERR) {
-        optimize_fixpusherr(opt, block, dest);
-    }
-}
 
 /** Fix function starting point */
 void optimize_fixfunction(optimizer *opt, codeblock *block) {
     if (block->isroot && block->func->entry==block->start) {
         block->func->entry=block->ostart;
     }
-}
-
-/** Layout blocks */
-void optimize_layoutblocks(optimizer *opt) {
-    codeblockindx nblocks = opt->cfgraph.count;
-    varray_codeblockindx sorted; // Sorted block indices
-    varray_instruction out; // Destination program
-    
-    varray_codeblockindxinit(&sorted);
-    varray_instructioninit(&out);
-    
-    optimize_sortblocks(opt,&sorted);
-    optimize_restart(opt, 0);
-    
-    instructionindx iout=0; // Track instruction count
-    
-    /** Fix annotations */
-    optimize_fixannotations(opt, &sorted);
-    
-    /** Copy and compactify blocks */
-    for (unsigned int i=0; i<nblocks; i++) {
-        codeblock *block = optimize_getblock(opt, sorted.data[i]);
-        
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-        printf("Compacting block %u.\n", sorted.data[i]);
-        optimize_printblock(opt, sorted.data[i]);
-#endif
-        
-        int ninstructions=optimize_compactifyblock(opt, block, &out);
-        
-        block->ostart=iout; // Record block's new start and end point
-        block->oend=iout+ninstructions-1;
-        
-        optimize_fixfunction(opt, block);
-        
-        iout+=ninstructions;
-    }
-    
-    /** Fix branch instructions */
-    for (unsigned int i=0; i<nblocks; i++) {
-        codeblock *block = optimize_getblock(opt, sorted.data[i]);
-        optimize_fixbranch(opt, block, &out);
-    }
-    
-    /** Patch instructions into program */
-    varray_instructionclear(&opt->out->code);
-    opt->out->code=out;
-    
-    /** Patch new annotations into program */
-    varray_debugannotationclear(&opt->out->annotations);
-    opt->out->annotations=opt->aout;
-    varray_debugannotationinit(&opt->aout); // Reinitialize optimizers annotation record
-    
-    varray_codeblockindxclear(&sorted);
 }
 
 /* **********************************************************************

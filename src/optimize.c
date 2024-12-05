@@ -216,6 +216,8 @@ bool optimize_block(optimizer *opt, block *blk) {
 bool optimize(program *in) {
     optimizer opt;
     
+    morpho_disassemble(NULL, in, NULL);
+    
     optimizer_init(&opt, in);
     
     cfgraph_build(in, &opt.graph);
