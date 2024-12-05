@@ -31,8 +31,14 @@ typedef struct {
     program *temp; /** Temporary program structure */
 } optimizer;
 
-/** Function that will be called by the optimizer to set the contents of the register info file */
+/** Function that can be called by the optimizer to set the contents of the register info file */
 typedef void (*opcodetrackingfn) (optimizer *opt);
+
+/** Usage functions will call this function to identify registers that are used */
+typedef void (*usagecallbackfn) (registerindx r, void *ref);
+
+/** Function that can be called by the optimizer to track register usage */
+typedef void (*opcodeusagefn) (instruction instr, usagecallbackfn usefn, void *ref);
 
 extern value typestring;
 extern value typebool;

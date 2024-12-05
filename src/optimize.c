@@ -175,7 +175,13 @@ bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     return true;
 }
 
-/** Updates reginfo usage information based on the opcode*/
+void _optusagefn(registerindx r, void *ref) {
+    reginfolist *rinfo = (reginfolist *) ref;
+    
+    reginfolist_uses(rinfo, r);
+}
+
+/** Updates reginfo usage information based on the opcode */
 void optimize_usage(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
@@ -186,6 +192,9 @@ void optimize_usage(optimizer *opt) {
     if (flags & OPCODE_USES_RANGEBC) {
         for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) reginfolist_uses(&opt->rlist, i);
     }
+    
+    opcodeusagefn usagefn = opcode_getusagefn(DECODE_OP(instr));
+    if (usagefn) usagefn(instr, _optusagefn, &opt->rlist);
 }
 
 /** Disassembles the current instruction */

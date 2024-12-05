@@ -277,6 +277,12 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     cfgraphbuilder_addblock(bld, &blk);
 }
 
+void _usagefn(registerindx i, void *ref) {
+    block *blk = (block *) ref;
+    
+    block_setuses(blk, i);
+}
+
 /** Determines which registers a block uses and writes to */
 void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
     for (instructionindx i=blk->start; i<=blk->end; i++) {
@@ -305,7 +311,9 @@ void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
             }
         }
         
-        // CALL, INVOKE and CLOSURE have unusual usage not captured here
+        // A few opcodes have unusual usage and provide a tracking function
+        opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
+        if (usagefn) usagefn(instr, _usagefn, blk);
     }
 }
 
