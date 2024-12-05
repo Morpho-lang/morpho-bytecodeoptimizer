@@ -304,6 +304,8 @@ void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
                 if (!block_writes(blk, i)) block_setuses(blk, i);
             }
         }
+        
+        // CALL, INVOKE and CLOSURE have unusual usage not captured here
     }
 }
 

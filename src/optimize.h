@@ -58,6 +58,7 @@ bool optimize_source(optimizer *opt, registerindx i, instructionindx *indx);
 instruction optimize_getinstruction(optimizer *opt);
 void optimize_replaceinstruction(optimizer *opt, instruction instr);
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr);
+bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst);
 
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 

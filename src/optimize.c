@@ -107,7 +107,7 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
     
     bool success=(contents==REG_CONSTANT);
-    if (success) *out = ix;
+    if (success && out) *out = ix;
     
     return success;
 }
@@ -142,6 +142,24 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr) {
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
     opt->prog->code.data[i]=instr;
     opt->nchanged++;
+}
+
+/** Replaces the current instruction with LCT r, and a given constant */
+bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst) {
+    // Add the constant to the constant table
+    indx kindx;
+    if (!optimize_addconstant(opt, konst, &kindx)) return false;
+    
+    // Replace the instruction
+    optimize_replaceinstruction(opt, ENCODE_LONG(OP_LCT, r, (unsigned int) kindx));
+    
+    // Set the contents of the register
+    optimize_write(opt, r, REG_CONSTANT, kindx);
+    
+    value type; // Also set type information
+    if (optimize_typefromvalue(konst, &type)) optimize_settype(opt, r, type);
+    
+    return true;
 }
 
 /** Attempts to delete an instruction. Checks to see if the instruction has side effects and ignores the deletion if it does.

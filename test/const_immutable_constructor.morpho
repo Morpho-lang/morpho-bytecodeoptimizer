@@ -1,0 +1,7 @@
+// An immutable constructed from constants can be constructed at compile time
+
+import bytecodeoptimizer
+
+var l = 1..5
+
+print l 

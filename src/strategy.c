@@ -14,10 +14,7 @@
  * Local optimization strategies
  * ********************************************************************** */
 
-/** An empty strategy */
-bool strategy_null(optimizer *opt) {
-    return false;
-}
+#define CHECK(f) if (!(f)) return false;
 
 /* -------------------------------------
  * Reduce power to multiplication
@@ -46,11 +43,11 @@ bool strategy_constant_folding(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     instruction op = DECODE_OP(instr);
     
-    if (op<OP_ADD || op>OP_LE) return false; // Quickly eliminate non-arithmetic instructions
+    CHECK(op>=OP_ADD && op<=OP_LE); // Quickly eliminate non-arithmetic instructions
     
     indx left, right; // Check both operands are constants
-    if (!(optimize_isconstant(opt, DECODE_B(instr), &left) &&
-         optimize_isconstant(opt, DECODE_C(instr), &right))) return false;
+    CHECK(optimize_isconstant(opt, DECODE_B(instr), &left) &&
+         optimize_isconstant(opt, DECODE_C(instr), &right));
         
     // A program that evaluates the required op with the selected constants.
     instruction ilist[] = {
@@ -62,24 +59,12 @@ bool strategy_constant_folding(optimizer *opt) {
     
     // Evaluate the program
     value new = MORPHO_NIL;
-    if (!optimize_evalsubprogram(opt, ilist, 0, &new)) return false;
+    CHECK(optimize_evalsubprogram(opt, ilist, 0, &new));
     
-    // Add the constant to the constant table
-    indx nkonst;
-    if (!optimize_addconstant(opt, new, &nkonst)) {
+    // Replace CALL with an appropriate LCT
+    if (!optimize_replacewithloadconstant(opt, DECODE_A(instr), new)) {
         morpho_freeobject(new);
         return false;
-    }
-    
-    // Replace the instruction
-    optimize_replaceinstruction(opt, ENCODE_LONG(OP_LCT, DECODE_A(instr), (unsigned int) nkonst));
-    
-    // Set the contents of the register
-    optimize_write(opt, DECODE_A(instr), REG_CONSTANT, nkonst);
-    
-    value type;
-    if (optimize_typefromvalue(new, &type)) {
-        optimize_settype(opt, DECODE_A(instr), type);
     }
     
     return true;
@@ -94,7 +79,7 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
     // Return quickly if this instruction doesn't overrwrite
-    if (!(flags & (OPCODE_OVERWRITES_A | OPCODE_OVERWRITES_B))) return false;
+    CHECK(flags & (OPCODE_OVERWRITES_A | OPCODE_OVERWRITES_B));
     
     registerindx r = (flags & OPCODE_OVERWRITES_A ? DECODE_A(instr) : DECODE_Bx(instr));
     bool success=false;
@@ -108,15 +93,67 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     return success;
 }
 
+/* -------------------------------------
+ * Constant Immutable Constructor
+ * ------------------------------------- */
+
+bool strategy_constant_immutable(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    
+    registerindx rA=DECODE_A(instr);
+    int nargs = DECODE_B(instr);
+    
+    // Ensure call target and arguments are all constants
+    indx cindx[nargs+1];
+    for (registerindx r=rA; r<rA + nargs + 1; r++) {
+        CHECK(optimize_isconstant(opt, r, cindx + r - rA));
+    }
+    
+    // Retrieve the call target
+    value fn = optimize_getconstant(opt, cindx[0]);
+    
+    // Check the function is a constructor
+    CHECK(MORPHO_ISBUILTINFUNCTION(fn) &&
+          (MORPHO_GETBUILTINFUNCTION(fn)->flags & MORPHO_FN_CONSTRUCTOR));
+    
+    // Todo: Should check for immutability! 
+        
+    // A program that evaluates the required op with the selected constants.
+    varray_instruction prog;
+    varray_instructioninit(&prog);
+    
+    for (int i=0; i<nargs+1; i++) { // Setup load constants incl. the function
+        varray_instructionwrite(&prog, ENCODE_LONG(OP_LCT, i, (instruction) cindx[i]));
+    }
+    
+    varray_instructionwrite(&prog, ENCODE_DOUBLE(OP_CALL, 0, (instruction) nargs));
+    varray_instructionwrite(&prog, ENCODE_BYTE(OP_END));
+    
+    // Evaluate the program
+    value new = MORPHO_NIL;
+    bool success=optimize_evalsubprogram(opt, prog.data, 0, &new);
+    varray_instructionclear(&prog);
+    
+    // Replace CALL with an appropriate LCT
+    if (success) {
+        if (!optimize_replacewithloadconstant(opt, DECODE_A(instr), new)) {
+            morpho_freeobject(new);
+        }
+    }
+    
+    return success;
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
 
 optimizationstrategy strategies[] = {
-    { OP_ANY, strategy_constant_folding,       0 },
-    { OP_ANY, strategy_dead_store_elimination, 0 },
-    { OP_POW, strategy_power_reduction,        0 },
-    { OP_END, NULL,                            0 }
+    { OP_ANY,  strategy_constant_folding,       0 },
+    { OP_ANY,  strategy_dead_store_elimination, 0 },
+    { OP_CALL, strategy_constant_immutable,     0 },
+    { OP_POW,  strategy_power_reduction,        0 },
+    { OP_END,  NULL,                            0 }
 };
 
 /* **********************************************************************
