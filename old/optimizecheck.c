@@ -255,47 +255,6 @@ void optimize_fixannotations(optimizer *opt, varray_codeblockindx *blocks) {
 }
 
 /* **********************************************************************
-* Decode instructions
-* ********************************************************************** */
-
-/** Track contents of registers etc */
-void optimize_track(optimizer *opt) {
-    instruction instr=opt->current;
-    
-    int op=DECODE_OP(instr);
-    switch (op) 
-        case OP_ADD:
-        case OP_SUB:
-        case OP_MUL:
-        case OP_DIV:
-        case OP_POW:
-            optimize_resolvearithmetictype(opt);
-            break;
-        case OP_LGL:
-        {
-            //registerindx a = DECODE_A(instr);
-            //optimize_regoverwrite(opt, a);
-            optimize_useglobal(opt, DECODE_Bx(instr));
-            //optimize_regcontents(opt, a, GLOBAL, DECODE_Bx(instr));
-            optimize_regsettype(opt, DECODE_A(instr), optimize_getglobaltype(opt, DECODE_Bx(instr)));
-        }
-            break;
-        case OP_CLOSURE:
-        {
-            optimize_reguse(opt, DECODE_A(instr));
-            registerindx b = DECODE_B(instr); // Get which registers are used from the upvalue prototype
-            varray_upvalue *v = &opt->func->prototype.data[b];
-            for (unsigned int i=0; i<v->count; i++) optimize_reguse(opt, (registerindx) v->data[i].reg);
-            //optimize_regoverwrite(opt, DECODE_A(instr)); // Generates a closure in register
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        default:
-            UNREACHABLE("Opcode not supported in optimizer.");
-    }
-}
-
-/* **********************************************************************
 * Control Flow graph
 * ********************************************************************** */
 

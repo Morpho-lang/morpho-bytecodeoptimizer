@@ -280,7 +280,7 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
 void _usagefn(registerindx i, void *ref) {
     block *blk = (block *) ref;
     
-    block_setuses(blk, i);
+    if (!block_writes(blk, i)) block_setuses(blk, i);
 }
 
 /** Determines which registers a block uses and writes to */
