@@ -250,6 +250,7 @@ MORPHO_ENDCLASS
 
 value typestring;
 value typebool;
+value typeclosure;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -262,6 +263,9 @@ void bytecodeoptimizer_initialize(void) {
 
     objectstring stringlabel = MORPHO_STATICSTRING("String");
     typestring = builtin_findclass(MORPHO_OBJECT(&stringlabel));
+    
+    objectstring closurelabel = MORPHO_STATICSTRING("Closure");
+    typeclosure = builtin_findclass(MORPHO_OBJECT(&closurelabel));
 }
 
 void bytecodeoptimizer_finalize(void) {

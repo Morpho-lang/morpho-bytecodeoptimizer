@@ -367,7 +367,7 @@ void optimize_track(optimizer *opt) {
             //registerindx a = DECODE_A(instr);
             //optimize_reguse(opt, DECODE_B(instr));
             //optimize_reguse(opt, DECODE_C(instr));
-            optimize_regoverwrite(opt, a);
+            //optimize_regoverwrite(opt, a);
             optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
         }
             break;
@@ -387,9 +387,9 @@ void optimize_track(optimizer *opt) {
         }
             break;
         case OP_LUP:
-            optimize_regoverwrite(opt, DECODE_A(instr));
+            //optimize_regoverwrite(opt, DECODE_A(instr));
             //optimize_regcontents(opt, DECODE_A(instr), UPVALUE, DECODE_B(instr));
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
             break;
         case OP_SUP:
             //optimize_reguse(opt, DECODE_B(instr));
@@ -402,7 +402,7 @@ void optimize_track(optimizer *opt) {
             //optimize_reguse(opt, a);
             //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
             //optimize_regoverwrite(opt, b);
-            optimize_regcontents(opt, b, VALUE, REGISTER_UNALLOCATED);
+            //optimize_regcontents(opt, b, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         case OP_SIX:

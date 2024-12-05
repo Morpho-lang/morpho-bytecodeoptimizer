@@ -56,6 +56,16 @@ void cmp_trackingfn(optimizer *opt) {
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
+void lup_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_write(opt, DECODE_A(instr), REG_UPVALUE, DECODE_B(instr));
+}
+
+void closure_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_settype(opt, DECODE_A(instr), typeclosure);
+}
+
 void cat_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_settype(opt, DECODE_A(instr), typestring);
@@ -96,19 +106,19 @@ opcodeinfo opcodetable[] = {
     { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, NULL },
     { OP_RETURN,  "return",  OPCODE_USES_B | OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL }, // Cond on A
     
-    { OP_CLOSEUP, "closeup", OPCODE_UNSUPPORTED, NULL },
+    { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL },
     
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn },
     { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn },
     { OP_SGL, "sgl", OPCODE_USES_A, NULL },
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL },
-    { OP_LUP, "lup", OPCODE_OVERWRITES_A, NULL },
+    { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn },
     { OP_SUP, "sup", OPCODE_USES_B, NULL },
     { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL },
     
-    { OP_CLOSURE, "closure", OPCODE_UNSUPPORTED, NULL },
+    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn },
     
     { OP_PRINT, "print", OPCODE_USES_A, NULL },
     

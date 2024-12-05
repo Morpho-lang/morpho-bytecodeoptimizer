@@ -36,6 +36,7 @@ typedef void (*opcodetrackingfn) (optimizer *opt);
 
 extern value typestring;
 extern value typebool;
+extern value typeclosure;
 
 /* **********************************************************************
  * Interface for optimization strategies
