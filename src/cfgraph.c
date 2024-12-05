@@ -122,6 +122,25 @@ bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
     return false;
 }
 
+int _blockcmp(const void *a, const void *b) {
+    block *aa = (block *) a;
+    block *bb = (block *) b;
+    return ((int) aa->start) - ((int) bb->start);
+}
+
+/** Sort a cfgraph */
+void cfgraph_sort(cfgraph *graph) {
+    qsort(graph->data, graph->count, sizeof(block), _blockcmp);
+}
+
+/** Find a block in a sorted cfgraph */
+bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out) {
+    block key = { .start = start };
+    block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockcmp);
+    if (*out) *out=srch;
+    return srch;
+}
+
 /* **********************************************************************
  * Control flow graph builder
  * ********************************************************************** */

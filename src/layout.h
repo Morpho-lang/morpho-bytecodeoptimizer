@@ -7,4 +7,8 @@
 #ifndef layout_h
 #define layout_h
 
+#include "optimize.h"
+
+void layout_build(optimizer *opt);
+
 #endif

@@ -825,51 +825,6 @@ void optimize_optimizeblock(optimizer *opt, codeblockindx block, optimizationstr
  * Final processing and layout of final program
  * ********************************************************************** */
 
-codeblock *blocklist;
-
-/** Sort blocks */
-int optimize_blocksortfn(const void *a, const void *b) {
-    codeblockindx ia = *(codeblockindx *) a,
-                  ib = *(codeblockindx *) b;
-    
-    instructionindx starta = blocklist[ia].start,
-                    startb = blocklist[ib].start;
-
-    return (startb>starta ? -1 : (startb==starta ? 0 : 1 ) );
-}
-
-/** Construct and sort a list of block indices */
-void optimize_sortblocks(optimizer *opt, varray_codeblockindx *out) {
-    codeblockindx nblocks = opt->cfgraph.count;
-    
-    // Sort blocks by position
-    for (codeblockindx i=0; i<nblocks; i++) {
-        varray_codeblockindxwrite(out, i);
-    }
-    
-    blocklist = opt->cfgraph.data;
-    qsort(out->data, nblocks, sizeof(codeblockindx), optimize_blocksortfn);
-}
-
-/** Compactifies a block, writing the results to dest*/
-int optimize_compactifyblock(optimizer *opt, codeblock *block, varray_instruction *dest) {
-    int count=0; // Count number of copied instructions
-    optimize_moveto(opt, block->start);
-    
-    do {
-        optimize_fetch(opt);
-        
-        if (opt->op!=OP_NOP) {
-            varray_instructionwrite(dest, opt->current);
-            count++;
-        }
-        
-        optimize_advance(opt);
-    } while (optimizer_currentindx(opt)<=block->end);
-    
-    return count;
-}
-
 /** Fixes a pusherr dictionary */
 void optimize_fixpusherr(optimizer *opt, codeblock *block, varray_instruction *dest) {
     instruction last = dest->data[block->oend];
