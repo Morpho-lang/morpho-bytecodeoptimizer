@@ -165,9 +165,9 @@ void layout_build(optimizer *opt) {
         blockcomposer_fixbranch(&comp, comp.graph->data+i, comp.outgraph.data+i);
     }
     
-    // Copy new code across
-    comp.in->code.count=0;
-    varray_instructionadd(&comp.in->code, comp.out.data, comp.out.count);
+    // Swap old and new code
+    varray_instruction tmp = comp.in->code;
+    comp.in->code=comp.out; comp.out=tmp;
     
     // Patch in annotations
     
