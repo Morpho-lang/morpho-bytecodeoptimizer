@@ -194,7 +194,7 @@ void optimize_usage(optimizer *opt) {
     }
     
     opcodeusagefn usagefn = opcode_getusagefn(DECODE_OP(instr));
-    if (usagefn) usagefn(instr, _optusagefn, &opt->rlist);
+    if (usagefn) usagefn(instr, opt->currentblk, _optusagefn, &opt->rlist);
 }
 
 /** Disassembles the current instruction */

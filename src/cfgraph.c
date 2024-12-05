@@ -313,7 +313,7 @@ void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
         
         // A few opcodes have unusual usage and provide a tracking function
         opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
-        if (usagefn) usagefn(instr, _usagefn, blk);
+        if (usagefn) usagefn(instr, blk, _usagefn, blk);
     }
 }
 

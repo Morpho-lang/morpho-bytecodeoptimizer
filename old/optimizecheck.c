@@ -286,8 +286,8 @@ void optimize_track(optimizer *opt) {
             registerindx b = DECODE_B(instr); // Get which registers are used from the upvalue prototype
             varray_upvalue *v = &opt->func->prototype.data[b];
             for (unsigned int i=0; i<v->count; i++) optimize_reguse(opt, (registerindx) v->data[i].reg);
-            optimize_regoverwrite(opt, DECODE_A(instr)); // Generates a closure in register
-            optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
+            //optimize_regoverwrite(opt, DECODE_A(instr)); // Generates a closure in register
+            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
         }
             break;
         default:

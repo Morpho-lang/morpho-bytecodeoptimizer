@@ -26,22 +26,25 @@ typedef struct {
  * Opcode usage functions
  * ********************************************************************** */
 
-void call_usagefn(instruction instr, usagecallbackfn fn, void *ref) {
+void call_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx rA = DECODE_A(instr);
     int nargs = DECODE_B(instr);
     
     for (registerindx i=rA+1; i<=rA+nargs; i++) fn(i, ref);
 }
 
-void invoke_usagefn(instruction instr, usagecallbackfn fn, void *ref) {
+void invoke_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx rA = DECODE_A(instr);
     int nargs = DECODE_C(instr);
     
     for (registerindx i=rA+1; i<=rA+nargs; i++) fn(i, ref);
 }
 
-void closure_usagefn(instruction instr) {
-    
+void closure_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
+    registerindx B = DECODE_B(instr); // Get which registers are used from the upvalue prototype
+
+    varray_upvalue *v = &blk->func->prototype.data[B];
+    for (unsigned int i=0; i<v->count; i++) fn((registerindx) v->data[i].reg, ref);
 }
 
 /* **********************************************************************

@@ -38,7 +38,7 @@ typedef void (*opcodetrackingfn) (optimizer *opt);
 typedef void (*usagecallbackfn) (registerindx r, void *ref);
 
 /** Function that can be called by the optimizer to track register usage */
-typedef void (*opcodeusagefn) (instruction instr, usagecallbackfn usefn, void *ref);
+typedef void (*opcodeusagefn) (instruction instr, block *blk, usagecallbackfn usefn, void *ref);
 
 extern value typestring;
 extern value typebool;
