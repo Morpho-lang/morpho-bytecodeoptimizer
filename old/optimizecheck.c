@@ -263,90 +263,13 @@ void optimize_track(optimizer *opt) {
     instruction instr=opt->current;
     
     int op=DECODE_OP(instr);
-    switch (op) {
-        case OP_NOP: // Opcodes to ignore
-        case OP_PUSHERR:
-        case OP_POPERR:
-        case OP_BREAK:
-        case OP_END:
-        case OP_B:
-        case OP_CLOSEUP:
-            break;
-        case OP_MOV:
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), REGISTER, DECODE_B(instr));
-            //optimize_regsettype(opt, DECODE_A(instr), optimize_getregtype(opt, DECODE_B(instr)));
-            break;
-        case OP_LCT:
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), CONSTANT, DECODE_Bx(instr));
-            //if (opt->func && DECODE_Bx(instr)<opt->func->konst.count) {
-            //    value k = opt->func->konst.data[DECODE_Bx(instr)];
-            //    optimize_regsettype(opt, DECODE_A(instr), k);
-            //}
-            break;
+    switch (op) 
         case OP_ADD:
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
         case OP_POW:
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_reguse(opt, DECODE_C(instr));
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
             optimize_resolvearithmetictype(opt);
-            break;
-        case OP_EQ:
-        case OP_NEQ:
-        case OP_LT:
-        case OP_LE:
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_reguse(opt, DECODE_C(instr));
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-            //optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
-            break;
-        case OP_NOT:
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-            //optimize_regsettype(opt, DECODE_A(instr), MORPHO_TRUE);
-            break;
-        case OP_BIF:
-        case OP_BIFF:
-            //optimize_reguse(opt, DECODE_A(instr));
-            break;
-        case OP_CALL:
-        {
-            //registerindx a = DECODE_A(instr);
-            //registerindx b = DECODE_B(instr);
-            //optimize_reguse(opt, a);
-            //for (unsigned int i=0; i<b; i++) {
-            //    optimize_reguse(opt, a+i+1);
-            //    opt->reg[a+i+1].contains=NOTHING; // call uses and overwrites arguments.
-            //}
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        case OP_INVOKE:
-        {
-            //registerindx a = DECODE_A(instr);
-            //registerindx b = DECODE_B(instr);
-            //registerindx c = DECODE_C(instr);
-            //optimize_reguse(opt, a);
-            //optimize_reguse(opt, b);
-            //for (unsigned int i=0; i<c; i++) {
-            //    optimize_reguse(opt, a+i+1);
-            //    opt->reg[a+i+1].contains=NOTHING; // invoke uses and overwrites arguments.
-            //}
-            //optimize_regoverwrite(opt, a);
-            //optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        case OP_RETURN:
-            //if (DECODE_A(instr)>0) optimize_reguse(opt, DECODE_B(instr));
             break;
         case OP_LGL:
         {
@@ -357,25 +280,6 @@ void optimize_track(optimizer *opt) {
             optimize_regsettype(opt, DECODE_A(instr), optimize_getglobaltype(opt, DECODE_Bx(instr)));
         }
             break;
-        case OP_SGL:
-            optimize_reginvalidate(opt, GLOBAL, DECODE_Bx(instr));
-            //optimize_reguse(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), GLOBAL, DECODE_Bx(instr));
-            break;
-        case OP_LPR:
-        {
-            //registerindx a = DECODE_A(instr);
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_reguse(opt, DECODE_C(instr));
-            //optimize_regoverwrite(opt, a);
-            optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        case OP_SPR:
-            //optimize_reguse(opt, DECODE_A(instr));
-            //optimize_reguse(opt, DECODE_B(instr));
-            //optimize_reguse(opt, DECODE_C(instr));
-            break;
         case OP_CLOSURE:
         {
             optimize_reguse(opt, DECODE_A(instr));
@@ -384,47 +288,6 @@ void optimize_track(optimizer *opt) {
             for (unsigned int i=0; i<v->count; i++) optimize_reguse(opt, (registerindx) v->data[i].reg);
             optimize_regoverwrite(opt, DECODE_A(instr)); // Generates a closure in register
             optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        case OP_LUP:
-            //optimize_regoverwrite(opt, DECODE_A(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), UPVALUE, DECODE_B(instr));
-            //optimize_regcontents(opt, DECODE_A(instr), VALUE, REGISTER_UNALLOCATED);
-            break;
-        case OP_SUP:
-            //optimize_reguse(opt, DECODE_B(instr));
-            break;
-        case OP_LIX:
-        {
-            //registerindx a=DECODE_A(instr);
-            //registerindx b=DECODE_B(instr);
-            //registerindx c=DECODE_C(instr);
-            //optimize_reguse(opt, a);
-            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
-            //optimize_regoverwrite(opt, b);
-            //optimize_regcontents(opt, b, VALUE, REGISTER_UNALLOCATED);
-        }
-            break;
-        case OP_SIX:
-        {
-            //registerindx a=DECODE_A(instr);
-            //registerindx b=DECODE_B(instr);
-            //registerindx c=DECODE_C(instr);
-            //optimize_reguse(opt, a);
-            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
-        }
-            break;
-        case OP_PRINT:
-            //optimize_reguse(opt, DECODE_A(instr));
-            break;
-        case OP_CAT:
-        {
-            //registerindx a=DECODE_A(instr);
-            //registerindx b=DECODE_B(instr);
-            //registerindx c=DECODE_C(instr);
-            //for (unsigned int i=b; i<=c; i++) optimize_reguse(opt, i);
-            //optimize_regoverwrite(opt, a);
-            //optimize_regcontents(opt, a, VALUE, REGISTER_UNALLOCATED);
         }
             break;
         default:
@@ -444,35 +307,7 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
     optimize_moveto(opt, optimize_getstart(opt, block));
     
     while (!optimize_atend(opt)) {
-        optimize_fetch(opt);
-        
-        // If we have come upon an existing block terminate this one
-        codeblockindx next;
-        if (optimize_findblock(opt, optimizer_currentindx(opt), &next) && next!=block) {
-            optimize_adddest(opt, block, next); // and link this block to the existing one
-            return; // Terminate block
-        }
-        
-        optimize_setend(opt, block, optimizer_currentindx(opt));
-        
         switch (opt->op) {
-            case OP_B:
-            case OP_POPERR:
-            {
-                //int branchby = DECODE_sBx(opt->current);
-                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
-            }
-                return; // Terminate current block
-            case OP_BIF:
-            case OP_BIFF:
-            {
-                //int branchby = DECODE_sBx(opt->current);
-                
-                // Create two new blocks, one for each possible destination
-                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1, worklist);
-                //optimize_branchto(opt, block, optimizer_currentindx(opt)+1+branchby, worklist);
-            }
-                return; // Terminate current block
             case OP_PUSHERR:
             {
                 int ix = DECODE_Bx(opt->current);
@@ -491,16 +326,9 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
                 optimize_branchto(opt, block, optimizer_currentindx(opt)+1, worklist);
             }
                 return; // Terminate current block
-            case OP_RETURN:
-            case OP_END:
-                return; // Terminate current block
             default:
                 break;
         }
-        
-        optimize_track(opt); // Track register contents
-        optimize_overwrite(opt, false);
-        optimize_advance(opt);
     }
 }
 
