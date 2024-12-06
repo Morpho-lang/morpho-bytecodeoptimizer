@@ -10,6 +10,7 @@
 
 DEFINE_VARRAY(instructionindx, instructionindx)
 DEFINE_VARRAY(block, block)
+DEFINE_VARRAY(value, value)
 
 typedef unsigned int blockindx;
 
@@ -63,6 +64,11 @@ void block_setsource(block *b, instructionindx indx) {
 /** Sets destination blocks */
 void block_setdest(block *b, instructionindx indx) {
     dictionary_insert(&b->dest, MORPHO_INTEGER((int) indx), MORPHO_NIL);
+}
+
+/** Determines of a block is the entry point of the function */
+bool block_isentry(block *b) {
+    return (b->func) && (b->func->entry == (indx) b->start);
 }
 
 /* **********************************************************************
@@ -149,8 +155,13 @@ bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out) {
 typedef struct {
     program *in;
     cfgraph *out;
+    
     dictionary blkindx; /** Dictionary of block indices */
     varray_instructionindx worklist;
+    
+    dictionary components; /** Dictionary of functions and metafunctions */
+    varray_value compontentworklist;
+    
     objectfunction *currentfn;
 } cfgraphbuilder;
 
@@ -160,12 +171,16 @@ void cfgraphbuilder_init(cfgraphbuilder *bld, program *in, cfgraph *out) {
     bld->out=out;
     varray_instructionindxinit(&bld->worklist);
     dictionary_init(&bld->blkindx);
+    dictionary_init(&bld->components);
+    varray_valueinit(&bld->compontentworklist);
 }
 
 /** Clears an optimizer data structure */
 void cfgraphbuilder_clear(cfgraphbuilder *bld) {
     varray_instructionindxclear(&bld->worklist);
     dictionary_clear(&bld->blkindx);
+    dictionary_clear(&bld->components);
+    varray_valueclear(&bld->compontentworklist);
 }
 
 /** Adds a block to the worklist */
@@ -213,6 +228,17 @@ bool cfgraphbuilder_addblock(cfgraphbuilder *bld, block *blk) {
     return success;
 }
 
+/** Adds a component to the worklist if it has not already been processed */
+void cfgraphbuilder_pushcomponent(cfgraphbuilder *bld, value cmp) {
+    if (dictionary_get(&bld->components, cmp, NULL)) return;
+    varray_valueadd(&bld->compontentworklist, &cmp, 1);
+}
+
+/** Pops a component off the worklist */
+bool cfgraphbuilder_popcomponent(cfgraphbuilder *bld, value *cmp) {
+    return varray_valuepop(&bld->compontentworklist, cmp);
+}
+
 /* **********************************************************************
  * Build basic blocks
  * ********************************************************************** */
@@ -235,13 +261,6 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     } else {
         cfgraphbuilder_push(bld, start);
     }
-}
-
-/** Adds a function to the control flow graph */
-void cfgraphbuilder_addfunction(cfgraphbuilder *bld, value func) {
-    if (!MORPHO_ISFUNCTION(func)) return;
-    cfgraphbuilder_setcurrentfn(bld, MORPHO_GETFUNCTION(func));
-    cfgraphbuilder_push(bld, MORPHO_GETFUNCTION(func)->entry);
 }
 
 /** Creates a new basic block starting at a given instruction */
@@ -344,6 +363,60 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, block *blk) {
 }
 
 /* **********************************************************************
+ * Find functions and methods within other components
+ * ********************************************************************** */
+
+/** Pushes a function's entry block to the control flow graph worklist */
+void cfgraphbuilder_pushfunctionentryblock(cfgraphbuilder *bld, objectfunction *func) {
+    cfgraphbuilder_setcurrentfn(bld, func);
+    cfgraphbuilder_push(bld, func->entry);
+}
+
+/** Checks if a value contains a component*/
+bool cfgraphbuilder_iscomponent(value val) {
+    return MORPHO_ISFUNCTION(val) || MORPHO_ISMETAFUNCTION(val) || MORPHO_ISCLASS(val);
+}
+
+/** Searches a class for components and adds them */
+void cfgraphbuilder_searchclass(cfgraphbuilder *bld, objectclass *klss) {
+    for (unsigned int i=0; i<klss->methods.capacity; i++) {
+        if (!MORPHO_ISNIL(klss->methods.contents[i].key)) {
+            cfgraphbuilder_pushcomponent(bld, klss->methods.contents[i].val);
+        }
+    }
+}
+
+/** Searches a metafunction for components and adds them */
+void cfgraphbuilder_searchmetafunction(cfgraphbuilder *bld, objectmetafunction *mf) {
+    for (unsigned int i=0; i<mf->fns.count; i++) {
+        value val = mf->fns.data[i];
+        if (cfgraphbuilder_iscomponent(val)) cfgraphbuilder_pushcomponent(bld, val);
+    }
+}
+
+/** Searches a function for functions in its constant table; these are added to the component list */
+void cfgraphbuilder_searchfunction(cfgraphbuilder *bld, objectfunction *func) {
+    for (unsigned int i=0; i<func->konst.count; i++) {
+        value konst = func->konst.data[i];
+        if (cfgraphbuilder_iscomponent(konst)) cfgraphbuilder_pushcomponent(bld, konst);
+    }
+}
+
+/** Processes a component to find functions, methods and additional blocks */
+void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
+    if (MORPHO_ISFUNCTION(comp)) {
+        objectfunction *func = MORPHO_GETFUNCTION(comp);
+        printf("Processing function '%s'\n", MORPHO_ISSTRING(func->name) ? MORPHO_GETCSTRING(func->name) : "<fn>");
+        cfgraphbuilder_pushfunctionentryblock(bld, func);
+        cfgraphbuilder_searchfunction(bld, func);
+    } else if (MORPHO_ISMETAFUNCTION(comp)) {
+        cfgraphbuilder_searchmetafunction(bld, MORPHO_GETMETAFUNCTION(comp));
+    } else if (MORPHO_ISCLASS(comp)) {
+        cfgraphbuilder_searchclass(bld, MORPHO_GETCLASS(comp));
+    }
+}
+
+/* **********************************************************************
  * Build control flow graph
  * ********************************************************************** */
 
@@ -353,12 +426,17 @@ void cfgraph_build(program *in, cfgraph *out) {
     
     cfgraphbuilder_init(&bld, in, out);
     
-    cfgraphbuilder_addfunction(&bld, MORPHO_OBJECT(in->global));
+    cfgraphbuilder_pushcomponent(&bld, MORPHO_OBJECT(in->global));
     
-    // Identify code blocks
-    instructionindx item;
-    while (cfgraphbuilder_pop(&bld, &item)) {
-        cfgraphbuilder_buildblock(&bld, item);
+    value component;
+    while (cfgraphbuilder_popcomponent(&bld, &component)) { // Loop over components
+        cfgraphbuilder_processcomponent(&bld, component);
+        
+        // Process blocks generated
+        instructionindx item;
+        while (cfgraphbuilder_pop(&bld, &item)) {
+            cfgraphbuilder_buildblock(&bld, item);
+        }
     }
     
     // Identify sources and destinations for each code block

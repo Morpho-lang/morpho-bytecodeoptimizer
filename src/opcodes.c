@@ -33,6 +33,11 @@ void call_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) 
     for (registerindx i=rA+1; i<=rA+nargs; i++) fn(i, ref);
 }
 
+void return_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
+    registerindx rA = DECODE_A(instr);
+    if (rA>0) fn(DECODE_B(instr), ref);
+}
+
 void invoke_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx rA = DECODE_A(instr);
     int nargs = DECODE_C(instr);
@@ -130,7 +135,7 @@ opcodeinfo opcodetable[] = {
     
     { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, NULL, call_usagefn },
     { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, NULL, invoke_usagefn },
-    { OP_RETURN,  "return",  OPCODE_USES_B | OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, NULL }, // Cond on A
+    { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn },
     
     { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL },
     

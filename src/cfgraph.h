@@ -51,6 +51,8 @@ bool block_writes(block *b, registerindx r);
 void block_setsource(block *b, instructionindx indx);
 void block_setdest(block *b, instructionindx indx);
 
+bool block_isentry(block *b);
+
 void cfgraph_init(cfgraph *graph);
 void cfgraph_clear(cfgraph *graph);
 void cfgraph_show(cfgraph *graph);
