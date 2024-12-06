@@ -108,7 +108,17 @@ void cmp_trackingfn(optimizer *opt) {
 
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    optimize_writevalue(opt, DECODE_A(instr));
+    registerindx a = DECODE_A(instr);
+    
+    value type=MORPHO_NIL;
+    indx kindx;
+    if (optimize_isconstant(opt, a, &kindx)) {
+        value konst = optimize_getconstant(opt, kindx);
+        if (MORPHO_ISCLASS(konst)) type=konst;
+    }
+    
+    optimize_writevalue(opt, a);
+    if (!MORPHO_ISNIL(type)) optimize_settype(opt, a, type);
 }
 
 void lup_trackingfn(optimizer *opt) {

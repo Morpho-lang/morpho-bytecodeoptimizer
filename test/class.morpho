@@ -1,0 +1,20 @@
+// A class 
+
+import bytecodeoptimizer
+
+class Foo {
+  init(a) {
+    self.a = a 
+  }
+
+  prnt() {
+    print self.a 
+  }
+}
+
+fn f() {
+  var a = Foo("Bar")
+  a.prnt() 
+}
+
+f() // Expect: Bar

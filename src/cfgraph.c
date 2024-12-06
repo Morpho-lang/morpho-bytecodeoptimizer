@@ -384,7 +384,8 @@ bool cfgraphbuilder_iscomponent(value val) {
 void cfgraphbuilder_searchclass(cfgraphbuilder *bld, objectclass *klss) {
     for (unsigned int i=0; i<klss->methods.capacity; i++) {
         if (!MORPHO_ISNIL(klss->methods.contents[i].key)) {
-            cfgraphbuilder_pushcomponent(bld, klss->methods.contents[i].val);
+            value val = klss->methods.contents[i].val;
+            if (cfgraphbuilder_iscomponent(val)) cfgraphbuilder_pushcomponent(bld, val);
         }
     }
 }
@@ -407,6 +408,8 @@ void cfgraphbuilder_searchfunction(cfgraphbuilder *bld, objectfunction *func) {
 
 /** Processes a component to find functions, methods and additional blocks */
 void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
+    dictionary_insert(&bld->components, comp, MORPHO_NIL);
+    
     if (MORPHO_ISFUNCTION(comp)) {
         objectfunction *func = MORPHO_GETFUNCTION(comp);
         if (bld->verbose) printf("Processing function '%s'\n", MORPHO_ISSTRING(func->name) ? MORPHO_GETCSTRING(func->name) : "<fn>");
