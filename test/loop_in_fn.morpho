@@ -4,7 +4,7 @@ import bytecodeoptimizer
 
 fn foo (x) {
   for (i in 1..x) {
-    var a = 2*i 
+    var a = 2*x
     print i
   }
 }

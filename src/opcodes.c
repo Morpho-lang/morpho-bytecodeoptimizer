@@ -79,7 +79,26 @@ void lgl_trackingfn(optimizer *opt) {
 }
 
 void arith_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx a=DECODE_A(instr);
+    registerindx b=DECODE_B(instr);
+    registerindx c=DECODE_C(instr);
     
+    optimize_writevalue(opt, a);
+    
+    value ta = MORPHO_NIL,
+          tb = optimize_type(opt, b),
+          tc = optimize_type(opt, c);
+    
+    if (tb==typeint && tc==typeint) {
+        ta = typeint;
+    } else if ((tb==typefloat && tc==typefloat) ||
+               (tb==typeint   && tc==typefloat) ||
+               (tb==typefloat && tc==typeint  )) {
+        ta = typefloat;
+    }
+    
+    if (!MORPHO_ISNIL(ta)) optimize_settype(opt, a, ta);
 }
 
 void cmp_trackingfn(optimizer *opt) {

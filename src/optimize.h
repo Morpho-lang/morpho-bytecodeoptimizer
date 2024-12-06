@@ -44,15 +44,14 @@ typedef void (*usagecallbackfn) (registerindx r, void *ref);
 /** Function that can be called by the optimizer to track register usage */
 typedef void (*opcodeusagefn) (instruction instr, block *blk, usagecallbackfn usefn, void *ref);
 
-extern value typestring;
-extern value typebool;
-extern value typeclosure;
+extern value typeint, typefloat, typestring, typebool, typeclosure;
 
 /* **********************************************************************
  * Interface for optimization strategies
  * ********************************************************************** */
 
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
+void optimize_writevalue(optimizer *opt, registerindx i);
 void optimize_settype(optimizer *opt, registerindx i, value type);
 value optimize_type(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);

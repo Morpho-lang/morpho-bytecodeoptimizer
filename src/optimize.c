@@ -55,6 +55,11 @@ void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx i
     reginfolist_write(&opt->rlist, opt->pc, r, contents, indx);
 }
 
+/** Callback function to set the contents of a register */
+void optimize_writevalue(optimizer *opt, registerindx r) {
+    reginfolist_write(&opt->rlist, opt->pc, r, REG_VALUE, INSTRUCTIONINDX_EMPTY);
+}
+
 /** Callback function to set the type of a register */
 void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
@@ -281,9 +286,7 @@ MORPHO_BEGINCLASS(Bool)
 MORPHO_METHOD(MORPHO_PRINT_METHOD, Bool_prnt, MORPHO_FN_FLAGSEMPTY)
 MORPHO_ENDCLASS
 
-value typestring;
-value typebool;
-value typeclosure;
+value typeint, typefloat, typestring, typebool, typeclosure;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -294,6 +297,12 @@ void bytecodeoptimizer_initialize(void) {
     typebool = builtin_addclass("Bool", MORPHO_GETCLASSDEFINITION(Bool), MORPHO_NIL);
     value_setveneerclass(MORPHO_TRUE, typebool);
 
+    objectstring intlabel = MORPHO_STATICSTRING("Int");
+    typeint = builtin_findclass(MORPHO_OBJECT(&intlabel));
+    
+    objectstring floatlabel = MORPHO_STATICSTRING("Float");
+    typefloat = builtin_findclass(MORPHO_OBJECT(&floatlabel));
+    
     objectstring stringlabel = MORPHO_STATICSTRING("String");
     typestring = builtin_findclass(MORPHO_OBJECT(&stringlabel));
     

@@ -20,6 +20,7 @@ typedef enum {
     REG_CONSTANT, /** Contents came from the constant table */
     REG_GLOBAL,   /** Contents came from a global */
     REG_UPVALUE,  /** Contents came from an upvalue */
+    REG_VALUE,    /** A value */
 } regcontents;
 
 /** Record information about each register */
