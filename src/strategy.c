@@ -47,7 +47,7 @@ bool strategy_duplicate_load_constant(optimizer *opt) {
     
     for (registerindx i=0; i<opt->rlist.nreg; i++) {
         indx oindx;
-        if (optimize_findconstant(opt, i, &oindx) &&
+        if (optimize_isconstant(opt, i, &oindx) &&
             cindx==oindx) {
          
             if (i!=a) { // Replace with a move instruction and note the duplication
