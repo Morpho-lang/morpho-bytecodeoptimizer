@@ -36,6 +36,34 @@ bool strategy_power_reduction(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Duplicate load constant
+ * ------------------------------------- */
+
+bool strategy_duplicate_load_constant(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    
+    registerindx a = DECODE_A(instr);
+    indx cindx = DECODE_Bx(instr);
+    
+    for (registerindx i=0; i<opt->rlist.nreg; i++) {
+        indx oindx;
+        if (optimize_isconstant(opt, i, &oindx) &&
+            cindx==oindx) {
+         
+            if (i!=a) { // Replace with a move instruction and note the duplication
+                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, a, i));
+            } else { // Register already contains this constant
+                optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+            }
+            
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/* -------------------------------------
  * Constant folding
  * ------------------------------------- */
 
@@ -192,6 +220,7 @@ optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_constant_folding,                 0 },
     { OP_ANY,  strategy_dead_store_elimination,           0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
+    { OP_LCT,  strategy_duplicate_load_constant,          0 },
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     { OP_END,  NULL,                                      0 }

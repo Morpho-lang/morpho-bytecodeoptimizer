@@ -250,7 +250,7 @@ bool optimize_block(optimizer *opt, block *blk) {
             strategy_optimizeinstruction(opt, 0);
             
             // Perform tracking to track register contents
-            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(instr));
+            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
             if (trackingfn) trackingfn(opt);
             
             // Update usage
