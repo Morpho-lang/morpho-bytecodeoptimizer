@@ -5,6 +5,7 @@
 */
 
 #include "morphocore.h"
+#include <morpho/debug.h>
 #include "layout.h"
 #include "cfgraph.h"
 #include "opcodes.h"
@@ -153,15 +154,143 @@ void blockcomposer_processblock(blockcomposer *comp, block *blk) {
 }
 
 /* **********************************************************************
+ * Remove unused instructions
+ * ********************************************************************** */
+
+/** Sorts the control flow graph */
+void layout_sortcfgraph(optimizer *opt) {
+    cfgraph_sort(&opt->graph);
+}
+
+/** Deletes unusud instructions */
+void layout_deleteunused(optimizer *opt) {
+    varray_instruction *code = &opt->prog->code;
+    
+    indx blkindx=0;
+    block *blk = &opt->graph.data[blkindx];
+    
+    // Loop over instructions
+    for (indx i=0; i<code->count; i++) {
+        if (i>blk->end) { // Check whether we need to move to the next block
+            blkindx++;
+            blk = &opt->graph.data[blkindx];
+        }
+        
+        // Check if this instruction is in the current block and if not delete it
+        if (!(i>=blk->start && i<=blk->end)) optimize_replaceinstructionat(opt, i, ENCODE_BYTE(OP_NOP));
+    }
+}
+
+/* **********************************************************************
+ * Fix annotations
+ * ********************************************************************** */
+
+typedef struct {
+    program *in;
+    
+    indx aindx; // Counter for annotation list
+    instructionindx iindx; // Instruction counter
+    
+    varray_debugannotation out; // Annotations processed
+} annotationfixer;
+
+void annotationfixer_init(annotationfixer *fix, program *p) {
+    fix->in = p;
+    fix->aindx = 0;
+    fix->iindx = 0;
+    varray_debugannotationinit(&fix->out);
+}
+
+void annotationfixer_clear(annotationfixer *fix, program *p) {
+    varray_debugannotationclear(&fix->out);
+}
+
+/** Gets the current annotation */
+debugannotation *annotationfixer_current(annotationfixer *fix) {
+    return &fix->in->annotations.data[fix->aindx];
+}
+
+/** Get next annotation and update annotation counters */
+void annotationfixer_advance(annotationfixer *fix) {
+    debugannotation *ann=annotationfixer_current(fix);
+    
+    if (ann->type==DEBUG_ELEMENT) fix->iindx+=ann->content.element.ninstr;
+    
+    fix->aindx++;
+}
+
+/** Are we at the end of annotations ? */
+bool annotationfixer_atend(annotationfixer *fix) {
+    return !(fix->aindx < fix->in->annotations.count);
+}
+
+/** Gets the instruction at a given index */
+instruction annotationfixer_getinstructionat(annotationfixer *fix, instructionindx i) {
+    return fix->in->code.data[i];
+}
+
+/** Count the number of nops between two instructions */
+int annotationfixer_countnops(annotationfixer *fix, instructionindx start, int ninstr) {
+    int count=0;
+    for (instructionindx i=start; i<start+ninstr; i++) {
+        instruction instr = annotationfixer_getinstructionat(fix, i);
+        if (DECODE_OP(instr)==OP_NOP) count++;
+    }
+    return count;
+}
+
+/** Loops over annotations, fixing the reference count */
+void layout_fixannotations(optimizer *opt) {
+    annotationfixer fix;
+    annotationfixer_init(&fix, opt->prog);
+    int ntotal = 0;
+    
+    if (opt->verbose) {
+        printf("===Fixing annotations\nOld annotations:\n");
+        debugannotation_showannotations(&fix.in->annotations);
+        morpho_disassemble(NULL, fix.in, NULL);
+    }
+    
+    for (;
+         !annotationfixer_atend(&fix);
+         annotationfixer_advance(&fix)) {
+        debugannotation *ann=annotationfixer_current(&fix);
+        
+        if (ann->type==DEBUG_ELEMENT) {
+            int nnops = annotationfixer_countnops(&fix, fix.iindx, ann->content.element.ninstr);
+            
+            int ninstr = ann->content.element.ninstr - nnops;
+            
+            if (ninstr) { // Don't copy across empty instructions.
+                debugannotation new = *ann;
+                new.content.element.ninstr = ninstr;
+                varray_debugannotationadd(&fix.out, &new, 1);
+            }
+            
+            ntotal += ninstr;
+        } else { // Copy across non element records
+            varray_debugannotationadd(&fix.out, ann, 1);
+        }
+    }
+
+    // Swap old and new annotations
+    varray_debugannotation tmp = fix.in->annotations;
+    fix.in->annotations = fix.out; fix.out=tmp;
+    
+    if (opt->verbose) {
+        printf("New annotations:\n");
+        debugannotation_showannotations(&fix.in->annotations);
+    }
+}
+
+/* **********************************************************************
  * Layout optimized blocks
  * ********************************************************************** */
 
 /** Layout and consolidate output program */
-void layout_build(optimizer *opt) {
+void layout_consolidate(optimizer *opt) {
     blockcomposer comp;
-    
     blockcomposer_init(&comp, opt->prog, &opt->graph);
-    cfgraph_sort(comp.graph);
     
     // Copy across blocks
     for (unsigned int i=0; i<comp.graph->count; i++) {
@@ -177,7 +306,17 @@ void layout_build(optimizer *opt) {
     varray_instruction tmp = comp.in->code;
     comp.in->code=comp.out; comp.out=tmp;
     
-    // Patch in annotations
-    
     blockcomposer_clear(&comp);
+}
+
+/* **********************************************************************
+ * Layout
+ * ********************************************************************** */
+
+/** Layout the destination program, repairing data structures as necessary */
+void layout(optimizer *opt) {
+    layout_sortcfgraph(opt);
+    layout_deleteunused(opt);
+    layout_fixannotations(opt);
+    layout_consolidate(opt);
 }

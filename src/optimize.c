@@ -308,12 +308,9 @@ bool optimize(program *in) {
     
     for (int i=0; i<opt.graph.count; i++) optimize_block(&opt, &opt.graph.data[i]);
     
-    layout_build(&opt);
+    layout(&opt);
     
-    for (instructionindx i=0; i<opt.prog->code.count; i++) {
-        optimize_fetch(&opt, i);
-        optimize_disassemble(&opt);
-    }
+    if (opt.verbose) morpho_disassemble(NULL, in, NULL);
     
     optimize_clear(&opt);
     return true;

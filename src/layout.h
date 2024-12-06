@@ -9,6 +9,11 @@
 
 #include "optimize.h"
 
-void layout_build(optimizer *opt);
+void layout_sortcfgraph(optimizer *opt);
+void layout_deleteunused(optimizer *opt);
+void layout_fixannotations(optimizer *opt);
+void layout_consolidate(optimizer *opt);
+
+void layout(optimizer *opt);
 
 #endif

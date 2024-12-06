@@ -109,55 +109,6 @@ void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
  * Handling code annotations
  * ********************************************************************** */
 
-/** Restarts annotations */
-void optimize_restartannotation(optimizer *opt) {
-    opt->a=0;
-    opt->aindx=0;
-    opt->aoffset=0;
-}
-
-/** Gets the current annotation */
-debugannotation *optimize_currentannotation(optimizer *opt) {
-    return &opt->out->annotations.data[opt->a];
-}
-
-/** Get next annotation and update annotation counters */
-void optimize_annotationadvance(optimizer *opt) {
-    debugannotation *ann=optimize_currentannotation(opt);
-    
-    opt->aoffset=0;
-    if (ann->type==DEBUG_ELEMENT) opt->aindx+=ann->content.element.ninstr;
-    
-    opt->a++;
-}
-
-/** Are we at the end of annotations */
-bool optimize_annotationatend(optimizer *opt) {
-    return !(opt->a < opt->out->annotations.count);
-}
-
-/** Moves the annotation  system to a specified instruction */
-void optimize_annotationmoveto(optimizer *opt, instructionindx ix) {
-    indx lastelement = 0;
-    if (ix<opt->aindx) optimize_restartannotation(opt);
-    for (;
-         !optimize_annotationatend(opt);
-         optimize_annotationadvance(opt)) {
-        
-        debugannotation *ann=optimize_currentannotation(opt);
-        if (ann->type==DEBUG_ELEMENT) {
-            if (opt->aindx+ann->content.element.ninstr>ix) {
-                opt->aoffset=ix-opt->aindx;
-                // If we are at the start of an element, instead return us to just after the last element record
-                if (opt->aoffset==0 && lastelement<opt->a) opt->a=lastelement+1;
-                return;
-            }
-            
-            lastelement=opt->a;
-        }
-    }
-}
-
 /** Copies across annotations for a specific code block */
 void optimize_annotationcopyforblock(optimizer *opt, codeblock *block) {
     optimize_annotationmoveto(opt, block->start);
