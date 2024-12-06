@@ -2,6 +2,7 @@ target_sources(bytecodeoptimizer
     PRIVATE
         cfgraph.c    cfgraph.h 
         eval.c       eval.h 
+        info.c       info.h 
         layout.c     layout.h 
         morphocore.h
         opcodes.c    opcodes.h

@@ -1,0 +1,7 @@
+// Global used as constant
+
+import bytecodeoptimizer
+
+var a = "Foo"
+
+print a  // expect: Foo

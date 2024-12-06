@@ -39,6 +39,7 @@ bool strategy_power_reduction(optimizer *opt) {
  * Duplicate load constant
  * ------------------------------------- */
 
+// Todo: Could this also be duplicate load global? 
 bool strategy_duplicate_load_constant(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     
