@@ -534,51 +534,6 @@ void optimize_restoreregisterstate(optimizer *opt, codeblockindx handle) {
 #endif
 }
 
-/** Optimize a block */
-void optimize_optimizeblock(optimizer *opt, codeblockindx block, optimizationstrategy *strategies) {
-    instructionindx start=optimize_getstart(opt, block),
-                    end=optimize_getend(opt, block);
-    
-    optimize_setcurrentblock(opt, block);
-    optimize_setfunction(opt, optimize_getfunction(opt, block));
-    
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-    printf("Optimizing block %u.\n", block);
-#endif
-    
-    do {
-        opt->nchanged=0;
-        optimize_restart(opt, start);
-        optimize_restoreregisterstate(opt, block); // Load registers
-        
-        for (;
-            optimizer_currentindx(opt)<=end;
-            optimize_advance(opt)) {
-            
-            optimize_fetch(opt);
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-            debug_disassembleinstruction(opt->current, optimizer_currentindx(opt), NULL, NULL);
-            printf("\n");
-#endif
-            optimize_optimizeinstruction(opt, strategies);
-            optimize_track(opt); // Track contents of registers
-            optimize_overwrite(opt, true);
-            
-    #ifdef MORPHO_DEBUG_LOGOPTIMIZER
-            optimize_regshow(opt);
-    #endif
-        }
-    } while (opt->nchanged>0);
-    
-    optimize_saveregisterstatetoblock(opt, block);
-    
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-    printf("Optimized block %u:\n", block);
-    optimize_printblock(opt, block);
-#endif
-}
-
-
 /* **********************************************************************
  * Final processing and layout of final program
  * ********************************************************************** */
@@ -605,13 +560,6 @@ void optimize_fixpusherr(optimizer *opt, codeblock *block, varray_instruction *d
     }
 }
 
-
-/** Fix function starting point */
-void optimize_fixfunction(optimizer *opt, codeblock *block) {
-    if (block->isroot && block->func->entry==block->start) {
-        block->func->entry=block->ostart;
-    }
-}
 
 /* **********************************************************************
  * Public interface

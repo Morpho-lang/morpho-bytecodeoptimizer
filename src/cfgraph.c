@@ -163,16 +163,19 @@ typedef struct {
     varray_value compontentworklist;
     
     objectfunction *currentfn;
+    
+    bool verbose;
 } cfgraphbuilder;
 
 /** Initializes an optimizer data structure */
-void cfgraphbuilder_init(cfgraphbuilder *bld, program *in, cfgraph *out) {
+void cfgraphbuilder_init(cfgraphbuilder *bld, program *in, cfgraph *out, bool verbose) {
     bld->in=in;
     bld->out=out;
     varray_instructionindxinit(&bld->worklist);
     dictionary_init(&bld->blkindx);
     dictionary_init(&bld->components);
     varray_valueinit(&bld->compontentworklist);
+    bld->verbose=verbose;
 }
 
 /** Clears an optimizer data structure */
@@ -406,7 +409,7 @@ void cfgraphbuilder_searchfunction(cfgraphbuilder *bld, objectfunction *func) {
 void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
     if (MORPHO_ISFUNCTION(comp)) {
         objectfunction *func = MORPHO_GETFUNCTION(comp);
-        printf("Processing function '%s'\n", MORPHO_ISSTRING(func->name) ? MORPHO_GETCSTRING(func->name) : "<fn>");
+        if (bld->verbose) printf("Processing function '%s'\n", MORPHO_ISSTRING(func->name) ? MORPHO_GETCSTRING(func->name) : "<fn>");
         cfgraphbuilder_pushfunctionentryblock(bld, func);
         cfgraphbuilder_searchfunction(bld, func);
     } else if (MORPHO_ISMETAFUNCTION(comp)) {
@@ -421,10 +424,10 @@ void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
  * ********************************************************************** */
 
 /** Builds a control flow graph */
-void cfgraph_build(program *in, cfgraph *out) {
+void cfgraph_build(program *in, cfgraph *out, bool verbose) {
     cfgraphbuilder bld;
     
-    cfgraphbuilder_init(&bld, in, out);
+    cfgraphbuilder_init(&bld, in, out, verbose);
     
     cfgraphbuilder_pushcomponent(&bld, MORPHO_OBJECT(in->global));
     
@@ -447,5 +450,5 @@ void cfgraph_build(program *in, cfgraph *out) {
     
     cfgraphbuilder_clear(&bld);
     
-    cfgraph_show(out);
+    if (bld.verbose) cfgraph_show(out);
 }

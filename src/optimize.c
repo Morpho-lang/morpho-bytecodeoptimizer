@@ -24,6 +24,12 @@ void optimizer_init(optimizer *opt, program *prog) {
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
+    
+#ifdef OPTIMIZER_VERBOSE
+    opt->verbose=true;
+#else
+    opt->verbose=false;
+#endif
 }
 
 /** Clears an optimizer data structure */
@@ -211,12 +217,12 @@ bool optimize_block(optimizer *opt, block *blk) {
     do {
         opt->nchanged=0;
         
-        printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
+        if (opt->verbose) printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
         reginfolist_init(&opt->rlist, blk->func->nregs);
         
         for (instructionindx i=blk->start; i<=blk->end; i++) {
             instruction instr = optimize_fetch(opt, i);
-            optimize_disassemble(opt);
+            if (opt->verbose) optimize_disassemble(opt);
             
             // Apply relevant optimization strategies
             strategy_optimizeinstruction(opt, 0);
@@ -228,7 +234,7 @@ bool optimize_block(optimizer *opt, block *blk) {
             // Update usage
             optimize_usage(opt);
             
-            reginfolist_show(&opt->rlist);
+            if (opt->verbose) reginfolist_show(&opt->rlist);
         }
     } while (opt->nchanged>0);
     
@@ -243,11 +249,11 @@ bool optimize_block(optimizer *opt, block *blk) {
 bool optimize(program *in) {
     optimizer opt;
     
-    morpho_disassemble(NULL, in, NULL);
-    
     optimizer_init(&opt, in);
     
-    cfgraph_build(in, &opt.graph);
+    if (opt.verbose) morpho_disassemble(NULL, in, NULL);
+    
+    cfgraph_build(in, &opt.graph, opt.verbose);
     
     for (int i=0; i<opt.graph.count; i++) optimize_block(&opt, &opt.graph.data[i]);
     

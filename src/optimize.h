@@ -11,6 +11,8 @@
 #include "reginfo.h"
 #include "cfgraph.h"
 
+#define OPTIMIZER_VERBOSE
+
 /* **********************************************************************
  * Optimizer data structure
  * ********************************************************************** */
@@ -29,6 +31,8 @@ typedef struct {
     
     vm *v; /** VM to execute subprograms */
     program *temp; /** Temporary program structure */
+    
+    bool verbose; /** Provide debugging output */
 } optimizer;
 
 /** Function that can be called by the optimizer to set the contents of the register info file */

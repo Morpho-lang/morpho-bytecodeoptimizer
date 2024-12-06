@@ -60,6 +60,6 @@ void cfgraph_show(cfgraph *graph);
 void cfgraph_sort(cfgraph *graph);
 bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out);
 
-void cfgraph_build(program *in, cfgraph *out);
+void cfgraph_build(program *in, cfgraph *out, bool verbose);
 
 #endif
