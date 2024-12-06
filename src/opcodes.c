@@ -106,6 +106,11 @@ void cmp_trackingfn(optimizer *opt) {
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
+void call_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_writevalue(opt, DECODE_A(instr));
+}
+
 void lup_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_write(opt, DECODE_A(instr), REG_UPVALUE, DECODE_B(instr));
@@ -152,8 +157,8 @@ opcodeinfo opcodetable[] = {
     { OP_BIF,  "bif",  OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL },
     { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL },
     
-    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, NULL, call_usagefn },
-    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, NULL, invoke_usagefn },
+    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn },
+    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn },
     { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn },
     
     { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL },

@@ -61,10 +61,15 @@ bool optimize_addconstant(optimizer *opt, value val, indx *indx);
 
 bool optimize_isempty(optimizer *opt, registerindx i);
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
+bool optimize_isoverwritten(optimizer *opt, registerindx i, instructionindx start);
+
 int optimize_countuses(optimizer *opt, registerindx i);
 bool optimize_source(optimizer *opt, registerindx i, instructionindx *indx);
 
 instruction optimize_getinstruction(optimizer *opt);
+instruction optimize_getinstructionat(optimizer *opt, instructionindx i);
+block *optimize_currentblock(optimizer *opt);
+
 void optimize_replaceinstruction(optimizer *opt, instruction instr);
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr);
 bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst);

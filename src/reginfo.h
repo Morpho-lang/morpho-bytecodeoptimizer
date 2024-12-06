@@ -50,6 +50,7 @@ void reginfolist_uses(reginfolist *rlist, int rindx);
 
 value reginfolist_type(reginfolist *rlist, int rindx);
 bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, indx *indx);
+regcontents reginfolist_regcontents(reginfolist *rlist, int rindx);
 bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx);
 int reginfolist_countuses(reginfolist *rlist, int rindx);
 

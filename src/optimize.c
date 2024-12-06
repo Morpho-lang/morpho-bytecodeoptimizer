@@ -123,6 +123,18 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     return success;
 }
 
+/** Checks if a register is overwritten between start and the current instruction */
+bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
+    for (instructionindx i=start; i<opt->pc; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        opcodeflags flags=opcode_getflags(instr);
+        if ( ((flags & OPCODE_OVERWRITES_A) && (DECODE_A(instr)==rindx)) ||
+            ((flags & OPCODE_OVERWRITES_B) && (DECODE_B(instr)==rindx)) ) return true;
+    }
+    
+    return false;
+}
+
 /** Extracts usage information */
 int optimize_countuses(optimizer *opt, registerindx i) {
     return reginfolist_countuses(&opt->rlist, i);
@@ -140,6 +152,11 @@ instruction optimize_getinstruction(optimizer *opt) {
 /** Gets the instruction at a given index; doesn't set this as the current instruction */
 instruction optimize_getinstructionat(optimizer *opt, instructionindx i) {
     return opt->prog->code.data[i];
+}
+
+/** Get the current block */
+block *optimize_currentblock(optimizer *opt) {
+    return opt->currentblk;
 }
 
 /** Callback function to get the current instruction */

@@ -71,6 +71,46 @@ bool strategy_constant_folding(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Common subexpression elimination
+ * ------------------------------------- */
+
+bool strategy_common_subexpression_elimination(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    instruction op = DECODE_OP(instr);
+    CHECK(op>=OP_ADD && op<=OP_LE); // Quickly eliminate non-arithmetic instructions
+    
+    bool success=false;
+    
+    static instruction mask = ( MASK_OP | MASK_B | MASK_C );
+    registerindx reg[] = { DECODE_B(instr), DECODE_C(instr) };
+    
+    block *blk = optimize_currentblock(opt);
+    
+    // Find if another register contains the same calculated value.
+    for (registerindx i=0; i<opt->rlist.nreg; i++) {
+        instructionindx src;
+        
+        if (reginfolist_regcontents(&opt->rlist, i)==REG_VALUE && // Must contain a value
+            reginfolist_source(&opt->rlist, i, &src) && // Obtain the source
+            src>=blk->start && // Check source is in this block
+            src<=blk->end) {
+            instruction prev = optimize_getinstructionat(opt, src);
+            
+            if ((prev & mask)==(opt->current & mask) && // Is instruction the same?
+                !optimize_isoverwritten(opt, DECODE_A(prev), src)) {
+                /* Todo: Also need to check if an instruction between the previous one and the
+                   current one overwrites any operands */
+                
+                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, DECODE_A(instr), DECODE_A(prev)));
+                success=true;
+            }
+        }
+    }
+    
+    return success;
+}
+
+/* -------------------------------------
  * Dead store elimination
  * ------------------------------------- */
 
@@ -116,7 +156,7 @@ bool strategy_constant_immutable(optimizer *opt) {
     CHECK(MORPHO_ISBUILTINFUNCTION(fn) &&
           (MORPHO_GETBUILTINFUNCTION(fn)->flags & MORPHO_FN_CONSTRUCTOR));
     
-    // Todo: Should check for immutability! 
+    // Todo: Should check for immutability!
         
     // A program that evaluates the required op with the selected constants.
     varray_instruction prog;
@@ -149,11 +189,12 @@ bool strategy_constant_immutable(optimizer *opt) {
  * ********************************************************************** */
 
 optimizationstrategy strategies[] = {
-    { OP_ANY,  strategy_constant_folding,       0 },
-    { OP_ANY,  strategy_dead_store_elimination, 0 },
-    { OP_CALL, strategy_constant_immutable,     0 },
-    { OP_POW,  strategy_power_reduction,        0 },
-    { OP_END,  NULL,                            0 }
+    { OP_ANY,  strategy_constant_folding,                 0 },
+    { OP_ANY,  strategy_dead_store_elimination,           0 },
+    //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
+    { OP_CALL, strategy_constant_immutable,               0 },
+    { OP_POW,  strategy_power_reduction,                  0 },
+    { OP_END,  NULL,                                      0 }
 };
 
 /* **********************************************************************

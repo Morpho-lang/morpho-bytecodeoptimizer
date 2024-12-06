@@ -4,10 +4,6 @@
  *  @brief Optimizer for compiled code
 */
 
-#include "optimize.h"
-#include "debug.h"
-#include "vm.h"
-
 /* **********************************************************************
  * Data structures
  * ********************************************************************** */
@@ -107,24 +103,6 @@ void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
             opt->reg[i].contains=VALUE;
         }
     }
-}
-
-/** Resolves the type of value produced by an arithmetic instruction */
-void optimize_resolvearithmetictype(optimizer *opt) {
-    registerindx a=DECODE_A(opt->current);
-    registerindx b=DECODE_B(opt->current);
-    registerindx c=DECODE_C(opt->current);
-    value ta = MORPHO_NIL, tb = opt->reg[b].type, tc = opt->reg[c].type;
-    
-    if (MORPHO_ISINTEGER(tb) && MORPHO_ISINTEGER(tc)) {
-        ta = MORPHO_INTEGER(1);
-    } else if ((MORPHO_ISINTEGER(tb) && MORPHO_ISFLOAT(tc)) ||
-               (MORPHO_ISFLOAT(tb) && MORPHO_ISINTEGER(tc)) ||
-               (MORPHO_ISFLOAT(tb) && MORPHO_ISFLOAT(tc))) {
-        ta = MORPHO_FLOAT(1.0);
-    }
-    
-    optimize_regsettype(opt, a, ta);
 }
 
 /* ------------
@@ -369,33 +347,6 @@ bool optimize_register_replacement(optimizer *opt) {
     return false; // This allows other optimization strategies to intervene after
 }
 
-
-/** Searches to see if an expression has already been calculated  */
-bool optimize_subexpression_elimination(optimizer *opt) {
-    if (opt->op<OP_ADD || opt->op>OP_LE) return false; // Quickly eliminate non-arithmetic instructions
-    static instruction mask = ( MASK_OP | MASK_B | MASK_C );
-    registerindx reg[] = { DECODE_B(opt->current), DECODE_C(opt->current) } ;
-    
-    // Find if another register contains the same calculated value.
-    for (registerindx i=0; i<opt->maxreg; i++) {
-        if (opt->reg[i].contains==VALUE) {
-            if (opt->reg[i].block!=opt->currentblock || // Only look within this block
-                opt->reg[i].iix==INSTRUCTIONINDX_EMPTY) continue;
-            instruction comp = optimize_fetchinstructionat(opt, opt->reg[i].iix);
-            
-            if ((comp & mask)==(opt->current & mask)) {
-                /* Need to check if an instruction between the previous one and the
-                   current one overwrites any operands */
-                
-                if (!optimize_checkoverwites(opt, opt->reg[i].iix, optimizer_currentindx(opt), (opt->op==OP_NOT ? 1 : 2), reg)) return false;
-                
-                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, DECODE_A(opt->current), i));
-                return true;
-            }
-        }
-    }
-    return false;
-}
 
 /** Optimize unconditional branches */
 bool optimize_branch_optimization(optimizer *opt) {

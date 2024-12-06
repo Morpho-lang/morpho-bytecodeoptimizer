@@ -51,12 +51,18 @@ void reginfolist_uses(reginfolist *rlist, int rindx) {
     rlist->rinfo[rindx].nused++;
 }
 
-/** Gets the content type associated with a register */
+/** Gets the content type and indx associated with a register */
 bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, indx *indx) {
     if (rindx>rlist->nreg) return false;
     if (contents) *contents = rlist->rinfo[rindx].contents;
     if (indx) *indx = rlist->rinfo[rindx].indx;
     return true;
+}
+
+/** Gets the content type associated with a register */
+regcontents reginfolist_regcontents(reginfolist *rlist, int rindx) {
+    if (rindx>rlist->nreg) return false;
+    return rlist->rinfo[rindx].contents;
 }
 
 /** Gets the instruction responsible for writing to this store */
@@ -78,6 +84,7 @@ void reginfolist_show(reginfolist *rlist) {
         printf("|\tr%u :", i);
         switch (rlist->rinfo[i].contents) {
             case REG_EMPTY: break;
+            case REG_VALUE: printf(" v"); break;
             case REG_REGISTER: printf(" r%td", rlist->rinfo[i].indx); break;
             case REG_GLOBAL: printf(" g%td", rlist->rinfo[i].indx); break;
             case REG_CONSTANT: printf(" c%td", rlist->rinfo[i].indx); break;
