@@ -79,25 +79,6 @@ bool blockcomposer_map(blockcomposer *comp, instructionindx old, instructionindx
     return success;
 }
 
-/** Processes a block by copying instrucitons from a source block  */
-void blockcomposer_processblock(blockcomposer *comp, block *blk) {
-    block out;
-    block_init(&out);
-    
-    out.start=comp->out.count;
-    
-    for (instructionindx i=blk->start; i<=blk->end; i++) {
-        instruction instr = blockcomposer_getinstruction(comp, i);
-        if (DECODE_OP(instr)!=OP_NOP) {
-            blockcomposer_addinstruction(comp, instr);
-        }
-    }
-    
-    out.end=comp->out.count-1;
-    
-    blockcomposer_addblock(comp, blk, &out);
-}
-
 /** Flattens the contents of a dictionary into  */
 int blockcomposer_dictflatten(dictionary *dict, int nmax, instructionindx *indx) {
     int k=0;
@@ -143,7 +124,34 @@ void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
         UNREACHABLE("PUSHERR unimplemented.");
     }
 }
+
+/** Fixes the function corresponding */
+void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func) {
+    instructionindx entry;
+    if (blockcomposer_map(comp, func->entry, &entry)) func->entry=entry;
+}
  
+/** Processes a block by copying instructions from a source block  */
+void blockcomposer_processblock(blockcomposer *comp, block *blk) {
+    block out;
+    block_init(&out);
+    
+    out.start=comp->out.count;
+    
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = blockcomposer_getinstruction(comp, i);
+        if (DECODE_OP(instr)!=OP_NOP) {
+            blockcomposer_addinstruction(comp, instr);
+        }
+    }
+    
+    out.end=comp->out.count-1;
+    
+    blockcomposer_addblock(comp, blk, &out);
+    
+    if (block_isentry(blk)) blockcomposer_fixfunction(comp, blk->func);
+}
+
 /* **********************************************************************
  * Layout optimized blocks
  * ********************************************************************** */

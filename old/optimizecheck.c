@@ -291,35 +291,6 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
     }
 }
 
-/** Adds a function to the control flow graph */
-void optimize_addfunction(optimizer *opt, value func) {
-    if (!MORPHO_ISFUNCTION(func)) return;
-    dictionary_insert(&opt->functions, func, MORPHO_TRUE);
-    optimize_searchlist(opt, &MORPHO_GETFUNCTION(func)->konst); // Search constant table
-}
-
-/** Builds all blocks starting from the current function */
-void optimize_rootblock(optimizer *opt, varray_codeblockindx *worklist) {
-    codeblockindx first = optimize_newblock(opt, opt->func->entry); // Start at the entry point of the program
-    
-#ifdef MORPHO_DEBUG_LOGOPTIMIZER
-    printf("Building root block [%u] for function '", first);
-    morpho_printvalue(MORPHO_OBJECT(opt->func));
-    printf("'\n");
-#endif
-    
-    optimize_setroot(opt, first);
-    varray_codeblockindxwrite(worklist, first);
-    optimize_incinbound(opt, first);
-
-    while (worklist->count>0) {
-        codeblockindx current;
-        if (!varray_codeblockindxpop(worklist, &current)) UNREACHABLE("Unexpectedly empty worklist in control flow graph");
-        
-        optimize_buildblock(opt, current, worklist);
-    }
-}
-
 /* **********************************************************************
  * Optimization strategies
  * ********************************************************************** */

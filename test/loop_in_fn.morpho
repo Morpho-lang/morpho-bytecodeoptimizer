@@ -1,0 +1,16 @@
+// Functions 
+
+import bytecodeoptimizer
+
+fn foo (x) {
+  for (i in 1..x) {
+    var a = 2*i 
+    print i
+  }
+}
+
+print foo(3)
+// expect: 1
+// expect: 2
+// expect: 3
+// expect: nil
