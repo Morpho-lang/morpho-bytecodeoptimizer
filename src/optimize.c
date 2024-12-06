@@ -123,6 +123,18 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
     return success;
 }
 
+/** Checks if a register holds another register */
+bool optimize_isregister(optimizer *opt, registerindx i, registerindx *out) {
+    regcontents contents=REG_EMPTY;
+    indx ix;
+    if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
+    
+    bool success=(contents==REG_REGISTER);
+    if (success && out) *out = (registerindx) ix;
+    
+    return success;
+}
+
 /** Checks if a register is overwritten between start and the current instruction */
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {
@@ -133,6 +145,23 @@ bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx 
     }
     
     return false;
+}
+
+/** Trace back through duplicate registers */
+registerindx optimize_findoriginalregister(optimizer *opt, registerindx rindx) {
+    registerindx out=rindx;
+    
+    while (optimize_isregister(opt, out, &out)) {
+        if (out==rindx) return out; // Break cycles
+    }
+    
+    return out;
+}
+
+/** Finds whether a register refers to a constant, searching back through other registers */
+bool optimize_findconstant(optimizer *opt, registerindx i, indx *out) {
+    registerindx orig = optimize_findoriginalregister(opt, i);
+    return optimize_isconstant(opt, orig, out);
 }
 
 /** Extracts usage information */

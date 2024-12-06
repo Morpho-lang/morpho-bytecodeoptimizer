@@ -24,7 +24,7 @@ bool strategy_power_reduction(optimizer *opt) {
     indx kindx;
     instruction instr = optimize_getinstruction(opt);
     
-    if (optimize_isconstant(opt, DECODE_C(instr), &kindx)) {
+    if (optimize_findconstant(opt, DECODE_C(instr), &kindx)) {
         value konst = optimize_getconstant(opt, kindx);
         if (MORPHO_ISINTEGER(konst) && MORPHO_GETINTEGERVALUE(konst)==2) {
             optimize_replaceinstruction(opt, ENCODE(OP_MUL, DECODE_A(instr), DECODE_B(instr), DECODE_B(instr)));
@@ -47,7 +47,7 @@ bool strategy_duplicate_load_constant(optimizer *opt) {
     
     for (registerindx i=0; i<opt->rlist.nreg; i++) {
         indx oindx;
-        if (optimize_isconstant(opt, i, &oindx) &&
+        if (optimize_findconstant(opt, i, &oindx) &&
             cindx==oindx) {
          
             if (i!=a) { // Replace with a move instruction and note the duplication
@@ -74,8 +74,8 @@ bool strategy_constant_folding(optimizer *opt) {
     CHECK(op>=OP_ADD && op<=OP_LE); // Quickly eliminate non-arithmetic instructions
     
     indx left, right; // Check both operands are constants
-    CHECK(optimize_isconstant(opt, DECODE_B(instr), &left) &&
-         optimize_isconstant(opt, DECODE_C(instr), &right));
+    CHECK(optimize_findconstant(opt, DECODE_B(instr), &left) &&
+          optimize_findconstant(opt, DECODE_C(instr), &right));
         
     // A program that evaluates the required op with the selected constants.
     instruction ilist[] = {

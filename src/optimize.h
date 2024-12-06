@@ -61,7 +61,11 @@ bool optimize_addconstant(optimizer *opt, value val, indx *indx);
 
 bool optimize_isempty(optimizer *opt, registerindx i);
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
+bool optimize_isregister(optimizer *opt, registerindx i, registerindx *indx);
 bool optimize_isoverwritten(optimizer *opt, registerindx i, instructionindx start);
+
+registerindx optimize_findoriginalregister(optimizer *opt, registerindx rindx);
+bool optimize_findconstant(optimizer *opt, registerindx i, indx *out);
 
 int optimize_countuses(optimizer *opt, registerindx i);
 bool optimize_source(optimizer *opt, registerindx i, instructionindx *indx);

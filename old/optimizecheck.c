@@ -105,20 +105,6 @@ void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
     }
 }
 
-/* ------------
- * Search
- * ------------ */
-
-/** Trace back through duplicate registers */
-registerindx optimize_findoriginalregister(optimizer *opt, registerindx reg) {
-    registerindx out=reg;
-    while (opt->reg[out].contains==REGISTER) {
-        out=(registerindx) opt->reg[out].id;
-        if (out==reg) return out;
-    }
-    return out;
-}
-
 /* **********************************************************************
  * Handling code annotations
  * ********************************************************************** */
@@ -279,31 +265,6 @@ typedef struct {
     int match;
     optimizationstrategyfn fn;
 } optimizationstrategy;
-
-/** Identifies duplicate constants instructions */
-bool optimize_duplicate_loadconst(optimizer *opt) {
-    registerindx out = DECODE_A(opt->current);
-    indx cindx = DECODE_Bx(opt->current);
-    
-    // Find if another register contains this constant
-    for (registerindx i=0; i<opt->maxreg; i++) {
-        if (opt->reg[i].contains==CONSTANT &&
-            opt->reg[i].id==cindx &&
-            opt->reg[i].block==opt->currentblock &&
-            opt->reg[i].iix<optimizer_currentindx(opt)) {
-            
-            if (i!=out) { // Replace with a move instruction and note the duplication
-                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, out, i));
-            } else { // Register already contains this constant
-                optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-            }
-            
-            return true;
-        }
-    }
-    
-    return false;
-}
 
 /** Identifies duplicate load instructions */
 bool optimize_duplicate_loadglobal(optimizer *opt) {
