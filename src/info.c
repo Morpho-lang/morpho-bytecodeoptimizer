@@ -61,3 +61,21 @@ bool globalinfolist_isconstant(globalinfolist *glist, int gindx, indx *kindx) {
     }
     return false;
 }
+
+/** Show the global info list */
+void globalinfolist_show(globalinfolist *glist) {
+    for (int i=0; i<glist->nglobals; i++) {
+        printf("|\tr%u : ", i);
+        switch(glist->list[i].contents) {
+            case GLOBAL_EMPTY: break;
+            case GLOBAL_CONSTANT:
+                printf("c%td ", glist->list[i].indx);
+                break;
+            case GLOBAL_VALUE:
+                printf("v ");
+        }
+        printf(" u:%i ", glist->list[i].nread);
+        if (!MORPHO_ISNIL(glist->list[i].type)) morpho_printvalue(NULL, glist->list[i].type);
+    }
+    
+}
