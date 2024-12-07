@@ -32,7 +32,7 @@ typedef struct {
     glblinfo *list;
 } globalinfolist;
 
-bool globalinfolist_init(int n, globalinfolist *glist);
+bool globalinfolist_init(globalinfolist *glist, int n);
 void globalinfolist_clear(globalinfolist *glist);
 
 void globalinfolist_read(globalinfolist *glist, int gindx);

@@ -84,6 +84,8 @@ bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value kons
 
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 
+globalinfolist *optimize_globalinfolist(optimizer *opt);
+
 void optimize_disassemble(optimizer *opt);
 
 #endif

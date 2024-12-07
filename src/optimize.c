@@ -22,7 +22,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, 0);
-    
+    globalinfolist_init(&opt->glist, prog->globals.count);
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
@@ -37,6 +37,7 @@ void optimizer_init(optimizer *opt, program *prog) {
 /** Clears an optimizer data structure */
 void optimize_clear(optimizer *opt) {
     cfgraph_clear(&opt->graph);
+    globalinfolist_clear(&opt->glist);
     
     if (opt->v) morpho_freevm(opt->v);
     if (opt->temp) morpho_freeprogram(opt->temp);
@@ -237,6 +238,11 @@ bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     
     optimize_replaceinstructionat(opt, indx, ENCODE_BYTE(OP_NOP));
     return true;
+}
+
+/** Gets the global info list */
+globalinfolist *optimize_globalinfolist(optimizer *opt) {
+    return &opt->glist;
 }
 
 void _optusagefn(registerindx r, void *ref) {

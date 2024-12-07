@@ -18,7 +18,7 @@ bool globalinfo_init(glblinfo *info) {
 }
 
 /** Allocate and initialize a global info list */
-bool globalinfolist_init(int n, globalinfolist *glist) {
+bool globalinfolist_init(globalinfolist *glist, int n) {
     glist->nglobals=n;
     glist->list=MORPHO_MALLOC(sizeof(glblinfo)*n);
     
