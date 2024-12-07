@@ -26,7 +26,9 @@ typedef struct {
     reginfolist rlist; /** Used to track register state */
     globalinfolist glist; /** Used to track globals */
     
-    block *currentblk; 
+    int pass; /** Count passes */
+    
+    block *currentblk;
     instructionindx pc;
     instruction current;
     int nchanged; /** Number of instructions changed in this pass */

@@ -303,7 +303,7 @@ optimizationstrategy strategies[] = {
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     
-    { OP_LGL,  strategy_constant_global,                  0 },
+    { OP_LGL,  strategy_constant_global,                  1 },
     { OP_END,  NULL,                                      0 }
 };
 

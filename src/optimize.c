@@ -20,6 +20,8 @@
 /** Initializes an optimizer data structure */
 void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
+    opt->pass=0;
+    
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, 0);
     globalinfolist_init(&opt->glist, prog->globals.count);
@@ -288,8 +290,8 @@ bool optimize_block(optimizer *opt, block *blk) {
             instruction instr = optimize_fetch(opt, i);
             if (opt->verbose) optimize_disassemble(opt);
             
-            // Apply relevant optimization strategies
-            strategy_optimizeinstruction(opt, 0);
+            // Apply relevant optimization strategies given the pass number
+            strategy_optimizeinstruction(opt, opt->pass);
             
             // Perform tracking to track register contents
             opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
@@ -303,6 +305,13 @@ bool optimize_block(optimizer *opt, block *blk) {
     } while (opt->nchanged>0);
     
     return true;
+}
+
+/** Run an optimization pass */
+void optimize_pass(optimizer *opt, int n) {
+    opt->pass=n; 
+    if (opt->verbose) printf("===Optimization pass %i===\n", n);
+    for (int i=0; i<opt->graph.count; i++) optimize_block(opt, &opt->graph.data[i]);
 }
 
 /* **********************************************************************
@@ -319,7 +328,7 @@ bool optimize(program *in) {
     
     cfgraph_build(in, &opt.graph, opt.verbose);
     
-    for (int i=0; i<opt.graph.count; i++) optimize_block(&opt, &opt.graph.data[i]);
+    for (int i=0; i<2; i++) optimize_pass(&opt, i);
     
     if (opt.verbose) globalinfolist_show(&opt.glist);
     
