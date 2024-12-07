@@ -36,7 +36,8 @@ bool globalinfolist_init(globalinfolist *glist, int n);
 void globalinfolist_clear(globalinfolist *glist);
 
 void globalinfolist_read(globalinfolist *glist, int gindx);
-void globalinfolist_write(globalinfolist *glist, int gindx, globalcontents contents, value type);
+void globalinfolist_writevalue(globalinfolist *glist, int gindx);
+void globalinfolist_writeconstant(globalinfolist *glist, int gindx, indx kindx);
 
 bool global_isconstant(globalinfolist *glist, int gindx, indx *kindx);
 

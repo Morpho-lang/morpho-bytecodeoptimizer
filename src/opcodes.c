@@ -78,6 +78,18 @@ void lgl_trackingfn(optimizer *opt) {
     optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
 }
 
+void sgl_trackingfn(optimizer *opt) {
+    globalinfolist *glist = optimize_globalinfolist(opt);
+    
+    instruction instr = optimize_getinstruction(opt);
+    
+    int gindx=DECODE_Bx(instr);
+    indx kindx;
+    if (optimize_isconstant(opt, gindx, &kindx)) {
+        globalinfolist_writeconstant(glist, gindx, kindx);
+    } else globalinfolist_writevalue(glist, gindx);
+}
+
 void arith_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a=DECODE_A(instr);
@@ -185,7 +197,7 @@ opcodeinfo opcodetable[] = {
     
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL },
     { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL },
-    { OP_SGL, "sgl", OPCODE_USES_A, NULL, NULL },
+    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL },
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, lpr_trackingfn, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL },

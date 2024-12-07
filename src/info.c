@@ -47,7 +47,9 @@ void globalinfolist_writevalue(globalinfolist *glist, int gindx) {
 
 /** Write contents to a global */
 void globalinfolist_writeconstant(globalinfolist *glist, int gindx, indx kindx) {
-    if (glist->list[gindx].contents==GLOBAL_EMPTY) {
+    if (glist->list[gindx].contents==GLOBAL_EMPTY ||
+               (glist->list[gindx].contents==GLOBAL_CONSTANT && // Ensure only one distinct constant is written
+                glist->list[gindx].indx == kindx)) {
         glist->list[gindx].contents=GLOBAL_CONSTANT;
         glist->list[gindx].indx=kindx;
     } else globalinfolist_writevalue(glist, gindx);
