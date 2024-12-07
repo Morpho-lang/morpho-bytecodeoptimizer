@@ -1,0 +1,14 @@
+// Register replacement
+
+import constants
+import bytecodeoptimizer
+
+fn foo() {
+  var i = Pi/2
+  var j = 2*sin(i)
+  var k = j 
+
+  print k + i - (2 + Pi/2)
+}
+
+foo() // expect: 0

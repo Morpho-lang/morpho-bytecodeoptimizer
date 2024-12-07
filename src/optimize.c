@@ -188,11 +188,11 @@ block *optimize_currentblock(optimizer *opt) {
     return opt->currentblk;
 }
 
-/** Callback function to get the current instruction */
+/** Callback function to replace the current instruction */
 void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     opt->current=opt->prog->code.data[opt->pc]=instr;
     opt->nchanged++;
-    optimize_disassemble(opt);
+    if (opt->verbose) optimize_disassemble(opt);
 }
 
 /** Callback function to get the current instruction */

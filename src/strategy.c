@@ -39,7 +39,7 @@ bool strategy_power_reduction(optimizer *opt) {
  * Duplicate load constant
  * ------------------------------------- */
 
-// Todo: Could this also be duplicate load global? 
+// Todo: Could this also be duplicate load global?
 bool strategy_duplicate_load_constant(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     
@@ -143,6 +143,32 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
  * Dead store elimination
  * ------------------------------------- */
 
+bool strategy_register_replacement(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    instruction op = DECODE_OP(instr);
+    CHECK(op>=OP_ADD && op<=OP_LE); // Quickly eliminate non-arithmetic instructions
+    
+    bool success=false;
+    
+    registerindx a=DECODE_A(instr),
+                 b=DECODE_B(instr),
+                 c=DECODE_C(instr);
+    
+    registerindx ob=optimize_findoriginalregister(opt, b);
+    registerindx oc=optimize_findoriginalregister(opt, c);
+    
+    if (ob!=b || oc!=c) {
+        optimize_replaceinstruction(opt, ENCODE(op, a, ob, oc));
+        success=true;
+    }
+    
+    return success;
+}
+
+/* -------------------------------------
+ * Dead store elimination
+ * ------------------------------------- */
+
 bool strategy_dead_store_elimination(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
@@ -220,6 +246,7 @@ bool strategy_constant_immutable(optimizer *opt) {
 optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_constant_folding,                 0 },
     { OP_ANY,  strategy_dead_store_elimination,           0 },
+    { OP_ANY,  strategy_register_replacement,             0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
     { OP_LCT,  strategy_duplicate_load_constant,          0 },
     { OP_CALL, strategy_constant_immutable,               0 },
