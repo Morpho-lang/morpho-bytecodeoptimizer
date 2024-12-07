@@ -286,6 +286,34 @@ void optimize_disassemble(optimizer *opt) {
     printf("\n");
 }
 
+/** Checks usage of a register by subsequent blocks; returns true if it's used */
+bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
+    
+    
+    
+    return false;
+}
+
+/** Optimizations performed at the end of a code block */
+void optimize_dead_store_elimination(optimizer *opt, block *blk) {
+    printf("Ending block\n");
+    for (int i=0; i<opt->rlist.nreg; i++) {
+        instructionindx src;
+        
+        if (!optimize_isempty(opt, i) &&                // Does the register contain something?
+            reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
+            !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
+            reginfolist_source(&opt->rlist, i, &src)) { // Identify the instruction that wrote it
+            
+            instruction instr = optimize_getinstructionat(opt, src);
+            debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
+            printf("\n");
+            
+            optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
+        }
+    }
+}
+
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
     opt->currentblk=blk;
@@ -312,6 +340,8 @@ bool optimize_block(optimizer *opt, block *blk) {
             
             if (opt->verbose) reginfolist_show(&opt->rlist);
         }
+        
+        optimize_dead_store_elimination(opt, blk);
     } while (opt->nchanged>0);
     
     return true;
@@ -336,12 +366,15 @@ bool optimize(program *in) {
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);
     
+    // Build control flow graph
     cfgraph_build(in, &opt.graph, opt.verbose);
     
+    // Perform optimization passes
     for (int i=0; i<3; i++) optimize_pass(&opt, i);
     
     if (opt.verbose) globalinfolist_show(&opt.glist);
     
+    // Layout final code and repair associated data structures
     layout(&opt);
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);
