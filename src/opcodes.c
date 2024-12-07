@@ -20,6 +20,7 @@ typedef struct {
     opcodeflags flags;
     opcodetrackingfn trackingfn;
     opcodeusagefn usagefn;
+    opcodetrackingfn replacefn;
 } opcodeinfo;
 
 /* **********************************************************************
@@ -164,61 +165,75 @@ void cat_trackingfn(optimizer *opt) {
 }
 
 /* **********************************************************************
+ * Opcode replacement functions
+ * ********************************************************************** */
+
+void lgl_replacementfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    globalinfolist_removeread(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
+}
+
+void sgl_replacementfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    globalinfolist_removestore(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
+}
+
+/* **********************************************************************
  * Opcode definition table
  * ********************************************************************** */
 
 int nopcodes;
 
 opcodeinfo opcodetable[] = {
-    { OP_NOP, "nop", OPCODE_BLANK, NULL, NULL },
+    { OP_NOP, "nop", OPCODE_BLANK, NULL, NULL, NULL },
     
-    { OP_MOV, "mov", OPCODE_OVERWRITES_A | OPCODE_USES_B, mov_trackingfn, NULL },
+    { OP_MOV, "mov", OPCODE_OVERWRITES_A | OPCODE_USES_B, mov_trackingfn, NULL, NULL },
     
-    { OP_ADD, "add", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL },
-    { OP_SUB, "sub", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL },
-    { OP_MUL, "mul", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL },
-    { OP_DIV, "div", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL },
-    { OP_POW, "pow", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL },
+    { OP_ADD, "add", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL, NULL },
+    { OP_SUB, "sub", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL, NULL },
+    { OP_MUL, "mul", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL, NULL },
+    { OP_DIV, "div", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL, NULL },
+    { OP_POW, "pow", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, arith_trackingfn, NULL, NULL },
     
-    { OP_NOT, "not", OPCODE_OVERWRITES_A | OPCODE_USES_B, cmp_trackingfn, NULL },
+    { OP_NOT, "not", OPCODE_OVERWRITES_A | OPCODE_USES_B, cmp_trackingfn, NULL, NULL },
     
-    { OP_EQ, "eq",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL },
-    { OP_NEQ, "neq", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL },
-    { OP_LT, "lt",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL },
-    { OP_LE, "le",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL },
+    { OP_EQ, "eq",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL, NULL },
+    { OP_NEQ, "neq", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL, NULL },
+    { OP_LT, "lt",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL, NULL },
+    { OP_LE, "le",   OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, cmp_trackingfn, NULL, NULL },
     
-    { OP_PUSHERR, "pusherr", OPCODE_BLANK, NULL, NULL },
-    { OP_POPERR,  "poperr",  OPCODE_ENDSBLOCK | OPCODE_BRANCH, NULL, NULL },
+    { OP_PUSHERR, "pusherr", OPCODE_BLANK, NULL, NULL, NULL },
+    { OP_POPERR,  "poperr",  OPCODE_ENDSBLOCK | OPCODE_BRANCH, NULL, NULL, NULL },
     
-    { OP_B,    "b",    OPCODE_ENDSBLOCK | OPCODE_BRANCH, NULL, NULL },
-    { OP_BIF,  "bif",  OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL },
-    { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL },
+    { OP_B,    "b",    OPCODE_ENDSBLOCK | OPCODE_BRANCH, NULL, NULL, NULL },
+    { OP_BIF,  "bif",  OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL, NULL },
+    { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_CONDITIONAL | OPCODE_USES_A, NULL, NULL, NULL },
     
-    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn },
-    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn },
-    { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn },
+    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn, NULL },
+    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn, NULL },
+    { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn, NULL },
     
-    { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL },
+    { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL, NULL },
     
-    { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL },
-    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL },
-    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL },
-    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, lpr_trackingfn, NULL },
-    { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL },
-    { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL },
-    { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL },
-    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, lix_trackingfn, NULL },
-    { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL },
+    { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL, NULL },
+    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, lgl_replacementfn },
+    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, sgl_replacementfn },
+    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, lpr_trackingfn, NULL, NULL },
+    { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
+    { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
+    { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL, NULL },
+    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, lix_trackingfn, NULL, NULL },
+    { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
     
-    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn, NULL },
+    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn, NULL, NULL },
     
-    { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL },
+    { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL, NULL },
     
-    { OP_BREAK, "break", OPCODE_BLANK, NULL, NULL },
+    { OP_BREAK, "break", OPCODE_BLANK, NULL, NULL, NULL },
     
-    { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC, cat_trackingfn, NULL },
+    { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC, cat_trackingfn, NULL, NULL },
     
-    { OP_END, "end", OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, NULL }
+    { OP_END, "end", OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, NULL, NULL }
 };
 
 /** Get the flags associated with a given opcode */
@@ -237,6 +252,11 @@ opcodetrackingfn opcode_gettrackingfn(instruction opcode) {
 opcodeusagefn opcode_getusagefn(instruction opcode) {
     if (opcode>nopcodes) return NULL;
     return opcodetable[opcode].usagefn;
+}
+
+opcodetrackingfn opcode_getreplacefn(instruction opcode) {
+    if (opcode>nopcodes) return NULL;
+    return opcodetable[opcode].replacefn;
 }
 
 /* **********************************************************************

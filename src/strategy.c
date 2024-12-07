@@ -68,10 +68,6 @@ bool strategy_duplicate_load(optimizer *opt) {
                 optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
             }
             
-            if (op==OP_LGL) {
-                globalinfolist_removeread(optimize_globalinfolist(opt), (int) cindx, optimize_getinstructionindx(opt));
-            }
-            
             return true;
         }
     }
@@ -200,10 +196,6 @@ bool strategy_dead_store_elimination(optimizer *opt) {
         optimize_source(opt, r, &iindx)) {
         
         success=optimize_deleteinstruction(opt, iindx);
-        
-        if (DECODE_OP(instr)==OP_LGL) { // Todo: This should probably go somewhere
-            globalinfolist_removeread(optimize_globalinfolist(opt), (int) DECODE_Bx(instr), optimize_getinstructionindx(opt));
-        }
     }
     return success;
 }
@@ -271,7 +263,6 @@ bool strategy_constant_global(optimizer *opt) {
     globalinfolist *glist = optimize_globalinfolist(opt);
     if (globalinfolist_isconstant(glist, DECODE_Bx(instr), &konst)) {
         optimize_replacewithloadconstant(opt, DECODE_A(instr), konst);
-        globalinfolist_removeread(glist, DECODE_Bx(instr), optimize_getinstructionindx(opt));
         success=true;
     }
     
@@ -290,7 +281,6 @@ bool strategy_unused_global(optimizer *opt) {
     globalinfolist *glist = optimize_globalinfolist(opt);
     if (globalinfolist_countread(glist, DECODE_Bx(instr))==0) {
         optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-        globalinfolist_removestore(glist, DECODE_Bx(instr), optimize_getinstructionindx(opt));
         success=true;
     }
     

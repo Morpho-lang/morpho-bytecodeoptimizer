@@ -98,6 +98,14 @@ unsigned int globalinfolist_countread(globalinfolist *glist, int gindx) {
     return glist->list[gindx].read.count;
 }
 
+void globalinflist_showdict(char *label, dictionary *dict) {
+    printf("(%s ", label);
+    for (unsigned int i=0; i<dict->capacity; i++) {
+        if (!MORPHO_ISNIL(dict->contents[i].key)) printf("%i ", MORPHO_GETINTEGERVALUE(dict->contents[i].key));
+    }
+    printf(")");
+}
+
 /** Show the global info list */
 void globalinfolist_show(globalinfolist *glist) {
     printf("Globals:\n");
@@ -113,7 +121,10 @@ void globalinfolist_show(globalinfolist *glist) {
             case GLOBAL_VALUE:
                 printf("v ");
         }
-        //printf(" u:%i ", glist->list[i].nread);
+        globalinflist_showdict("r:", &glist->list[i].read);
+        printf(" ");
+        globalinflist_showdict("w:", &glist->list[i].src);
+        
         if (!MORPHO_ISNIL(glist->list[i].type)) morpho_printvalue(NULL, glist->list[i].type);
         printf("\n");
     }

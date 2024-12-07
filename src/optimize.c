@@ -205,13 +205,18 @@ block *optimize_currentblock(optimizer *opt) {
 
 /** Callback function to replace the current instruction */
 void optimize_replaceinstruction(optimizer *opt, instruction instr) {
-    opt->current=opt->prog->code.data[opt->pc]=instr;
-    opt->nchanged++;
+    optimize_replaceinstructionat(opt, opt->pc, instr);
+    opt->current=instr;
     if (opt->verbose) optimize_disassemble(opt);
 }
 
 /** Callback function to get the current instruction */
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
+    instruction oinstr = opt->prog->code.data[i];
+    
+    opcodetrackingfn replacefn=opcode_getreplacefn(DECODE_OP(oinstr));
+    if (replacefn) replacefn(opt);
+    
     opt->prog->code.data[i]=instr;
     opt->nchanged++;
 }
@@ -333,7 +338,7 @@ bool optimize(program *in) {
     
     cfgraph_build(in, &opt.graph, opt.verbose);
     
-    for (int i=0; i<2; i++) optimize_pass(&opt, i);
+    for (int i=0; i<3; i++) optimize_pass(&opt, i);
     
     if (opt.verbose) globalinfolist_show(&opt.glist);
     
