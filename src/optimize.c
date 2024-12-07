@@ -321,6 +321,8 @@ bool optimize(program *in) {
     
     for (int i=0; i<opt.graph.count; i++) optimize_block(&opt, &opt.graph.data[i]);
     
+    if (opt.verbose) globalinfolist_show(&opt.glist);
+    
     layout(&opt);
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);

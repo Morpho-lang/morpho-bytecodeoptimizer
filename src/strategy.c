@@ -274,6 +274,20 @@ bool strategy_constant_immutable(optimizer *opt) {
     return success;
 }
 
+/* -------------------------------------
+ * Eliminate constant global
+ * ------------------------------------- */
+
+bool strategy_constant_global(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    value konst;
+    
+    if (globalinfolist_isconstant(optimize_globalinfolist(opt), DECODE_Bx(instr), &konst)) {
+        optimize_replacewithloadconstant(opt, DECODE_A(instr), konst);
+        
+    }
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
@@ -288,6 +302,8 @@ optimizationstrategy strategies[] = {
     { OP_LUP,  strategy_duplicate_load,                   0 },
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_POW,  strategy_power_reduction,                  0 },
+    
+    { OP_LGL,  strategy_constant_global,                  0 },
     { OP_END,  NULL,                                      0 }
 };
 

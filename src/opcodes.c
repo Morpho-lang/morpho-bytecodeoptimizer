@@ -86,7 +86,8 @@ void sgl_trackingfn(optimizer *opt) {
     int gindx=DECODE_Bx(instr);
     indx kindx;
     if (optimize_isconstant(opt, gindx, &kindx)) {
-        globalinfolist_writeconstant(glist, gindx, kindx);
+        value konst = optimize_getconstant(opt, kindx);
+        globalinfolist_writeconstant(glist, gindx, konst);
     } else globalinfolist_writevalue(glist, gindx);
 }
 

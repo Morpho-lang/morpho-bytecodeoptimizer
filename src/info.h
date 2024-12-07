@@ -22,9 +22,9 @@ typedef enum {
 
 typedef struct {
     globalcontents contents; /** What the global contains */
-    indx indx; /** An index for any contents */
-    value type; /** Type information if known  */
     int nread; /** Number of times read */
+    value type; /** Type information if known  */
+    value val; /** Value from constant */
 } glblinfo;
 
 typedef struct {
@@ -37,8 +37,10 @@ void globalinfolist_clear(globalinfolist *glist);
 
 void globalinfolist_read(globalinfolist *glist, int gindx);
 void globalinfolist_writevalue(globalinfolist *glist, int gindx);
-void globalinfolist_writeconstant(globalinfolist *glist, int gindx, indx kindx);
+void globalinfolist_writeconstant(globalinfolist *glist, int gindx, value konst);
 
-bool global_isconstant(globalinfolist *glist, int gindx, indx *kindx);
+bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst);
+
+void globalinfolist_show(globalinfolist *glist);
 
 #endif
