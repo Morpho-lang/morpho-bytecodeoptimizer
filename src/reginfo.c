@@ -69,7 +69,7 @@ bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, 
 
 /** Gets the content type associated with a register */
 regcontents reginfolist_regcontents(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return false;
+    if (rindx>rlist->nreg) return REG_EMPTY;
     return rlist->rinfo[rindx].contents;
 }
 

@@ -39,7 +39,6 @@ bool strategy_power_reduction(optimizer *opt) {
  * Duplicate load constant
  * ------------------------------------- */
 
-// Todo: Could this also be duplicate load global?
 bool strategy_duplicate_load_constant(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     
@@ -50,6 +49,42 @@ bool strategy_duplicate_load_constant(optimizer *opt) {
         indx oindx;
         if (optimize_isconstant(opt, i, &oindx) &&
             cindx==oindx) {
+         
+            if (i!=a) { // Replace with a move instruction and note the duplication
+                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, a, i));
+            } else { // Register already contains this constant
+                optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+            }
+            
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+
+bool strategy_duplicate_load(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    
+    regcontents contents;
+    switch (DECODE_OP(instr)) {
+        case OP_LGL: contents = REG_GLOBAL; break;
+        case OP_LCT: contents = REG_CONSTANT; break;
+        case OP_LUP: contents = REG_UPVALUE; break;
+        default: return false;
+    }
+    
+    registerindx a = DECODE_A(instr);
+    indx cindx = DECODE_Bx(instr);
+    
+    for (registerindx i=0; i<opt->rlist.nreg; i++) {
+        regcontents icontents;
+        indx iindx;
+        
+        if (optimize_contents(opt, i, &icontents, &iindx) &&
+            icontents==contents &&
+            cindx==iindx) {
          
             if (i!=a) { // Replace with a move instruction and note the duplication
                 optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, a, i));
@@ -248,7 +283,9 @@ optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_dead_store_elimination,           0 },
     { OP_ANY,  strategy_register_replacement,             0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
-    { OP_LCT,  strategy_duplicate_load_constant,          0 },
+    { OP_LCT,  strategy_duplicate_load,                   0 },
+    { OP_LGL,  strategy_duplicate_load,                   0 },
+    { OP_LUP,  strategy_duplicate_load,                   0 },
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     { OP_END,  NULL,                                      0 }

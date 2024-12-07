@@ -92,19 +92,6 @@ bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, i
     return false;
 }
 
-/* -----------
- * Reginfo
- * ----------- */
-
-/** Invalidates any old copies of a stored quantity */
-void optimize_reginvalidate(optimizer *opt, returntype type, indx id) {
-    for (unsigned int i=0; i<opt->maxreg; i++) {
-        if (opt->reg[i].contains==type && opt->reg[i].id==id) {
-            opt->reg[i].contains=VALUE;
-        }
-    }
-}
-
 /* **********************************************************************
 * Control Flow graph
 * ********************************************************************** */
@@ -177,24 +164,6 @@ bool optimize_duplicate_loadglobal(optimizer *opt) {
     
     return false;
 }
-
-/** Replaces duplicate registers  */
-bool optimize_register_replacement(optimizer *opt) {
-    if (opt->op<OP_ADD || opt->op>OP_LE) return false; // Quickly eliminate non-arithmetic instructions
-    
-    instruction instr=opt->current;
-    registerindx a=DECODE_A(instr),
-                 b=DECODE_B(instr),
-                 c=DECODE_C(instr);
-    
-    b=optimize_findoriginalregister(opt, b);
-    c=optimize_findoriginalregister(opt, c);
-    
-    optimize_replaceinstruction(opt, ENCODE(opt->op, a, b, c));
-    
-    return false; // This allows other optimization strategies to intervene after
-}
-
 
 /** Optimize unconditional branches */
 bool optimize_branch_optimization(optimizer *opt) {
@@ -357,40 +326,4 @@ void optimize_fixpusherr(optimizer *opt, codeblock *block, varray_instruction *d
             } else UNREACHABLE("Couldn't find error handler");
         }
     }
-}
-
-
-/* **********************************************************************
- * Public interface
- * ********************************************************************** */
-
-/* Perform an optimization pass */
-bool optimization_pass(optimizer *opt, optimizationstrategy *strategylist) {
-    // Now optimize blocks
-    varray_codeblockindx worklist;
-    varray_codeblockindxinit(&worklist);
-    
-    for (unsigned int i=0; i<opt->cfgraph.count; i++) {
-        opt->cfgraph.data[i].visited=0; // Clear visit flag
-        // Ensure all root blocks are on the worklist
-        if (opt->cfgraph.data[i].isroot) varray_codeblockindxwrite(&worklist, i); // Add to the worklist
-    }
-    
-    while (worklist.count>0) {
-        codeblockindx current;
-        if (!varray_codeblockindxpop(&worklist, &current)) UNREACHABLE("Unexpectedly empty worklist in optimizer");
-        
-        // Make sure we didn't already finalize this block
-        if (optimize_getvisited(opt, current)>=optimize_getinbound(opt, current)) continue;
-        
-        optimize_optimizeblock(opt, current, strategylist);
-        optimize_visit(opt, current);
-        optimize_desttoworklist(opt, current, &worklist);
-    }
-    
-    //optimize_checkunused(&opt);
-    
-    varray_codeblockindxclear(&worklist);
-    
-    return true;
 }

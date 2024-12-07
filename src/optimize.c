@@ -135,6 +135,11 @@ bool optimize_isregister(optimizer *opt, registerindx i, registerindx *out) {
     return success;
 }
 
+/** Returns the content type of a register */
+bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, indx *indx) {
+    return reginfolist_contents(&opt->rlist, i, contents, indx);
+}
+
 /** Checks if a register is overwritten between start and the current instruction */
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {
