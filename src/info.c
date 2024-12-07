@@ -10,7 +10,7 @@
  * Globals
  * ********************************************************************** */
 
-bool globalinfo_init(glblinfo *info) {
+void globalinfo_init(glblinfo *info) {
     info->contents=GLOBAL_EMPTY;
     info->type=MORPHO_NIL;
     info->val=MORPHO_NIL;

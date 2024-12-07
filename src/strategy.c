@@ -281,11 +281,14 @@ bool strategy_constant_immutable(optimizer *opt) {
 bool strategy_constant_global(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     value konst;
+    bool success=false;
     
     if (globalinfolist_isconstant(optimize_globalinfolist(opt), DECODE_Bx(instr), &konst)) {
         optimize_replacewithloadconstant(opt, DECODE_A(instr), konst);
-        
+        success=true;
     }
+    
+    return success;
 }
 
 /* **********************************************************************

@@ -56,7 +56,7 @@ bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx);
 int reginfolist_countuses(reginfolist *rlist, int rindx);
 
 void reginfolist_duplicate(reginfolist *rlist, int rindx);
-bool reginfolist_unduplicate(reginfolist *rlist, int rindx);
+void reginfolist_unduplicate(reginfolist *rlist, int rindx);
 
 void reginfolist_show(reginfolist *rlist);
 

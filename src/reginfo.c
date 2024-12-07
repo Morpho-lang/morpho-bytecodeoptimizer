@@ -88,12 +88,12 @@ int reginfolist_countuses(reginfolist *rlist, int rindx) {
 
 /** Indicate a register is duplicated */
 void reginfolist_duplicate(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return 0;
+    if (rindx>rlist->nreg) return;
     rlist->rinfo[rindx].ndup++;
 }
 
 /** Repairs duplicate registers when the original is overwritten */
-bool reginfolist_unduplicate(reginfolist *rlist, int rindx) {
+void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
     regcontents srccontents; // Content type of the source
     indx srcindx; // Indx of the source
     
