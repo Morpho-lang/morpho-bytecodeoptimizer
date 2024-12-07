@@ -51,13 +51,13 @@ instruction optimize_fetch(optimizer *opt, instructionindx i) {
 }
 
 /** Callback function to set the contents of a register */
-void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx indx) {
-    reginfolist_write(&opt->rlist, opt->pc, r, contents, indx);
+void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx ix) {
+    reginfolist_write(&opt->rlist, opt->pc, r, contents, ix);
 }
 
 /** Callback function to set the contents of a register */
 void optimize_writevalue(optimizer *opt, registerindx r) {
-    reginfolist_write(&opt->rlist, opt->pc, r, REG_VALUE, INSTRUCTIONINDX_EMPTY);
+    optimize_write(opt, r, REG_VALUE, INSTRUCTIONINDX_EMPTY);
 }
 
 /** Callback function to set the type of a register */

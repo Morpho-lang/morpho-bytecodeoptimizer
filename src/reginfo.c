@@ -15,6 +15,7 @@ void reginfo_init(reginfo *info) {
     info->iindx=INSTRUCTIONINDX_EMPTY;
     info->nused=0;
     info->type=MORPHO_NIL;
+    info->ndup=0; 
 }
 
 /** Initialize a reginfo list */
@@ -26,11 +27,18 @@ void reginfolist_init(reginfolist *rlist, int nreg) {
 /** Writes a value to a register */
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx) {
     if (rindx>rlist->nreg) return;
+    
+    // Repair other registers if this one has been duplicated
+    if (rlist->rinfo[rindx].ndup>0) reginfolist_unduplicate(rlist, rindx);
+    
     rlist->rinfo[rindx].contents=contents;
+    if (contents==REG_REGISTER) reginfolist_duplicate(rlist, (registerindx) indx); // Track duplication
+    
     rlist->rinfo[rindx].indx=indx;
     rlist->rinfo[rindx].nused=0;
     rlist->rinfo[rindx].iindx=iindx;
     rlist->rinfo[rindx].type=MORPHO_NIL;
+    rlist->rinfo[rindx].ndup=0;
 }
 
 /** Sets the type associated with a register */
@@ -78,6 +86,42 @@ int reginfolist_countuses(reginfolist *rlist, int rindx) {
     return rlist->rinfo[rindx].nused;
 }
 
+/** Indicate a register is duplicated */
+void reginfolist_duplicate(reginfolist *rlist, int rindx) {
+    if (rindx>rlist->nreg) return 0;
+    rlist->rinfo[rindx].ndup++;
+}
+
+/** Repairs duplicate registers when the original is overwritten */
+bool reginfolist_unduplicate(reginfolist *rlist, int rindx) {
+    regcontents srccontents; // Content type of the source
+    indx srcindx; // Indx of the source
+    
+    reginfolist_contents(rlist, rindx, &srccontents, &srcindx);
+    
+    for (registerindx i=0; i<rlist->nreg; i++) { // Look for registers
+        if (i==rindx) continue; // Skip over the tautological case
+        
+        regcontents icontents;
+        indx iindx;
+        
+        reginfolist_contents(rlist, i, &icontents, &iindx);
+        if (icontents==REG_REGISTER &&
+            iindx==rindx) {
+            // Move the contents from the source register into the duplicate reg i
+            instructionindx src;
+            reginfolist_source(rlist, i, &src); // The write instruction should remain the duplicating instruction
+            
+            reginfolist_write(rlist, src, i, srccontents, srcindx);
+            
+            // Usage count should be copied from src register
+            int nused = reginfolist_countuses(rlist, rindx);
+            rlist->rinfo[i].nused=nused;
+        }
+        
+    }
+}
+
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
     for (int i=0; i<rlist->nreg; i++) {
@@ -98,6 +142,8 @@ void reginfolist_show(reginfolist *rlist) {
         }
         
         printf(" u:%i", rlist->rinfo[i].nused); // Usage
+        
+        if (rlist->rinfo[i].ndup) printf(" d:%i", rlist->rinfo[i].ndup); // Duplication
         
         if (rlist->rinfo[i].contents!=REG_EMPTY) { // Who wrote it?
             printf(" w:%i", (int) rlist->rinfo[i].iindx);
