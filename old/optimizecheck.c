@@ -140,31 +140,6 @@ typedef struct {
     optimizationstrategyfn fn;
 } optimizationstrategy;
 
-/** Identifies duplicate load instructions */
-bool optimize_duplicate_loadglobal(optimizer *opt) {
-    registerindx out = DECODE_A(opt->current);
-    indx global = DECODE_Bx(opt->current);
-    
-    // Find if another register contains this global
-    for (registerindx i=0; i<opt->maxreg; i++) {
-        if (opt->reg[i].contains==GLOBAL &&
-            opt->reg[i].id==global &&
-            opt->reg[i].block==opt->currentblock &&
-            opt->reg[i].iix<optimizer_currentindx(opt)) { // Nonlocal eliminations require understanding the call graph to check for SGL. 
-            
-            if (i!=out) { // Replace with a move instruction and note the duplication
-                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, out, i));
-            } else { // Register already contains this global
-                optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-            }
-            
-            return true;
-        }
-    }
-    
-    return false;
-}
-
 /** Optimize unconditional branches */
 bool optimize_branch_optimization(optimizer *opt) {
     int sbx=DECODE_sBx(opt->current);

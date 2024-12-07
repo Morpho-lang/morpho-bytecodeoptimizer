@@ -9,6 +9,7 @@
 
 #include "morphocore.h"
 #include "reginfo.h"
+#include "info.h"
 #include "cfgraph.h"
 
 #define OPTIMIZER_VERBOSE
@@ -22,7 +23,8 @@ typedef struct {
     
     cfgraph graph;
 
-    reginfolist rlist;
+    reginfolist rlist; /** Used to track register state */
+    globalinfolist glist; /** Used to track globals */
     
     block *currentblk; 
     instructionindx pc;

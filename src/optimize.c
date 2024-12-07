@@ -9,6 +9,7 @@
 #include "opcodes.h"
 #include "cfgraph.h"
 #include "reginfo.h"
+#include "info.h"
 #include "strategy.h"
 #include "layout.h"
 
@@ -21,6 +22,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, 0);
+    
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
