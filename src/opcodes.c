@@ -75,7 +75,9 @@ void lct_trackingfn(optimizer *opt) {
 
 void lgl_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    
     optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
+    globalinfolist_read(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
 }
 
 void sgl_trackingfn(optimizer *opt) {
@@ -87,8 +89,10 @@ void sgl_trackingfn(optimizer *opt) {
     indx kindx;
     if (optimize_isconstant(opt, gindx, &kindx)) {
         value konst = optimize_getconstant(opt, kindx);
-        globalinfolist_writeconstant(glist, gindx, konst);
-    } else globalinfolist_writevalue(glist, gindx);
+        globalinfolist_setconstant(glist, gindx, konst);
+    } else globalinfolist_setvalue(glist, gindx);
+    
+    globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt));
 }
 
 void arith_trackingfn(optimizer *opt) {

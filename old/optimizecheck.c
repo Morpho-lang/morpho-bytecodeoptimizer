@@ -12,42 +12,6 @@
  * Globals
  * ----------- */
 
-/** Initialize globals */
-void optimize_initglobals(optimizer *opt) {
-    if (!opt->globals) return;
-    for (unsigned int i=0; i<opt->out->nglobals; i++) {
-        opt->globals[i].contains=NOTHING;
-        opt->globals[i].used=0;
-        opt->globals[i].type=MORPHO_NIL;
-        opt->globals[i].contents=MORPHO_NIL;
-    }
-}
-
-/** Indicates an instruction uses a global */
-void optimize_useglobal(optimizer *opt, indx ix) {
-    if (opt->globals) opt->globals[ix].used++;
-}
-
-/** Remove a reference to a global */
-void optimize_unuseglobal(optimizer *opt, indx ix) {
-    if (opt->globals) opt->globals[ix].used--;
-}
-
-/** Updates the contents of a global */
-void optimize_globalcontents(optimizer *opt, indx ix, returntype type, indx id) {
-    if (opt->globals) {
-        if (opt->globals[ix].contains==NOTHING) {
-            opt->globals[ix].contains = type;
-            opt->globals[ix].id = id;
-        } else if (opt->globals[ix].contains==type) {
-            if (opt->globals[ix].id!=id) opt->globals[ix].id = GLOBAL_UNALLOCATED;
-        } else {
-            opt->globals[ix].contains = VALUE;
-            opt->globals[ix].id = GLOBAL_UNALLOCATED;
-        }
-    }
-}
-
 /** Decides whether two types match */
 bool optimize_matchtype(value t1, value t2) {
     return MORPHO_ISSAME(t1, t2);
@@ -64,32 +28,10 @@ void optimize_updateglobaltype(optimizer *opt, indx ix, value type) {
     } else if (!optimize_matchtype(opt->globals[ix].type, type)) opt->globals[ix].type = OPTIMIZER_AMBIGUOUS;
 }
 
-/** Updates a globals value  */
-void optimize_updateglobalcontents(optimizer *opt, indx ix, value val) {
-    if (!opt->globals) return;
-    
-    if (MORPHO_ISNIL(opt->globals[ix].contents)) {
-        opt->globals[ix].contents = val;
-    } else if (MORPHO_ISSAME(opt->globals[ix].contents, OPTIMIZER_AMBIGUOUS)) {
-        return; 
-    } else if (!MORPHO_ISEQUAL(val, opt->globals[ix].contents)) opt->globals[ix].contents = OPTIMIZER_AMBIGUOUS;
-}
-
 /** Gets the type of a global */
 value optimize_getglobaltype(optimizer *opt, indx ix) {
     if (opt->globals) return opt->globals[ix].type;
     return MORPHO_NIL;
-}
-
-/** Gets the contents of a global */
-bool optimize_getglobalcontents(optimizer *opt, indx ix, returntype *contains, indx *id, value *contents) {
-    if (opt->globals) {
-        if (contains) *contains = opt->globals[ix].contains;
-        if (id) *id = opt->globals[ix].id;
-        if (contents) *contents = opt->globals[ix].contents;
-        return true;
-    }
-    return false;
 }
 
 /* **********************************************************************
@@ -128,105 +70,6 @@ void optimize_buildblock(optimizer *opt, codeblockindx block, varray_codeblockin
         }
     }
 }
-
-/* **********************************************************************
- * Optimization strategies
- * ********************************************************************** */
-
-typedef bool (*optimizationstrategyfn) (optimizer *opt);
-
-typedef struct {
-    int match;
-    optimizationstrategyfn fn;
-} optimizationstrategy;
-
-/** Optimize unconditional branches */
-bool optimize_branch_optimization(optimizer *opt) {
-    int sbx=DECODE_sBx(opt->current);
-    
-    if (sbx==0) {
-        optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-        return true;
-    }
-    
-    return false;
-}
-
-/** Deletes unused globals  */
-bool optimize_unused_global(optimizer *opt) {
-    indx gid=DECODE_Bx(opt->current);
-    if (!opt->globals[gid].used) { // If the global is unused, do not store to it
-        optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-    }
-    
-    return false;
-}
-
-/** Identifies globals that just contain a constant */
-bool optimize_constant_global(optimizer *opt) {
-    indx global = DECODE_Bx(opt->current);
-    returntype contents;
-    value val;
-    
-    if (optimize_getglobalcontents(opt, global, &contents, NULL, &val) &&
-        contents==CONSTANT &&
-        !OPTIMIZER_ISAMBIGUOUS(val)) {
-        indx kindx;
-        
-        if (optimize_addconstant(opt, val, &kindx)) {
-            optimize_replaceinstruction(opt, ENCODE_LONG(OP_LCT, DECODE_A(opt->current), kindx));
-            optimize_unuseglobal(opt, global);
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-/** Tracks information written to a global */
-bool optimize_storeglobal_trackcontents(optimizer *opt) {
-    registerindx rix = DECODE_A(opt->current);
-    value type = optimize_getregtype(opt, rix);
-    
-    optimize_updateglobaltype(opt, DECODE_Bx(opt->current), (MORPHO_ISNIL(type) ? OPTIMIZER_AMBIGUOUS: type));
-    
-    if (opt->reg[rix].contains!=NOTHING) {
-        optimize_globalcontents(opt, DECODE_Bx(opt->current), opt->reg[rix].contains, opt->reg[rix].id);
-        optimize_updateglobalcontents(opt, DECODE_Bx(opt->current), opt->reg[rix].type);
-    }
-    
-    return false;
-}
-
-/* --------------------------
- * Table of strategies
- * -------------------------- */
-
-#define OP_ANY -1
-#define OP_LAST OP_END+1
-
-// The first pass establishes the data flow from block-block
-// Only put things that can act on incomplete data flow here
-optimizationstrategy firstpass[] = {
-    { OP_LCT, optimize_duplicate_loadconst },
-    { OP_LGL, optimize_duplicate_loadglobal },
-    { OP_SGL, optimize_storeglobal_trackcontents },
-    { OP_POW, optimize_power_reduction },
-    { OP_LAST, NULL }
-};
-
-// The second pass is for arbitrary transformations
-optimizationstrategy secondpass[] = {
-    { OP_ANY, optimize_register_replacement },
-    { OP_ANY, optimize_subexpression_elimination },
-    { OP_ANY, optimize_constant_folding },          // Must be in second pass for correct data flow
-    { OP_LCT, optimize_duplicate_loadconst },
-    { OP_LGL, optimize_duplicate_loadglobal },
-    { OP_LGL, optimize_constant_global },           // Second pass to ensure all sgls have been seen
-    { OP_B,   optimize_branch_optimization },
-    { OP_SGL, optimize_unused_global },
-    { OP_LAST, NULL }
-};
 
 /* **********************************************************************
  * Optimize a block

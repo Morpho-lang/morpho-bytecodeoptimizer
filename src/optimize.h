@@ -78,6 +78,7 @@ bool optimize_source(optimizer *opt, registerindx i, instructionindx *indx);
 
 instruction optimize_getinstruction(optimizer *opt);
 instruction optimize_getinstructionat(optimizer *opt, instructionindx i);
+instructionindx optimize_getinstructionindx(optimizer *opt);
 block *optimize_currentblock(optimizer *opt);
 
 void optimize_replaceinstruction(optimizer *opt, instruction instr);

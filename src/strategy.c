@@ -36,39 +36,15 @@ bool strategy_power_reduction(optimizer *opt) {
 }
 
 /* -------------------------------------
- * Duplicate load constant
+ * Duplicate load
  * ------------------------------------- */
-
-bool strategy_duplicate_load_constant(optimizer *opt) {
-    instruction instr = optimize_getinstruction(opt);
-    
-    registerindx a = DECODE_A(instr);
-    indx cindx = DECODE_Bx(instr);
-    
-    for (registerindx i=0; i<opt->rlist.nreg; i++) {
-        indx oindx;
-        if (optimize_isconstant(opt, i, &oindx) &&
-            cindx==oindx) {
-         
-            if (i!=a) { // Replace with a move instruction and note the duplication
-                optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, a, i));
-            } else { // Register already contains this constant
-                optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
-            }
-            
-            return true;
-        }
-    }
-    
-    return false;
-}
-
 
 bool strategy_duplicate_load(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    instruction op = DECODE_OP(instr);
     
     regcontents contents;
-    switch (DECODE_OP(instr)) {
+    switch (op) {
         case OP_LGL: contents = REG_GLOBAL; break;
         case OP_LCT: contents = REG_CONSTANT; break;
         case OP_LUP: contents = REG_UPVALUE; break;
@@ -90,6 +66,10 @@ bool strategy_duplicate_load(optimizer *opt) {
                 optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, a, i));
             } else { // Register already contains this constant
                 optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+            }
+            
+            if (op==OP_LGL) {
+                globalinfolist_removeread(optimize_globalinfolist(opt), (int) cindx, optimize_getinstructionindx(opt));
             }
             
             return true;
@@ -218,7 +198,12 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     if (!optimize_isempty(opt, r) &&
         optimize_countuses(opt, r)==0 &&
         optimize_source(opt, r, &iindx)) {
+        
         success=optimize_deleteinstruction(opt, iindx);
+        
+        if (DECODE_OP(instr)==OP_LGL) { // Todo: This should probably go somewhere
+            globalinfolist_removeread(optimize_globalinfolist(opt), (int) DECODE_Bx(instr), optimize_getinstructionindx(opt));
+        }
     }
     return success;
 }
@@ -275,7 +260,7 @@ bool strategy_constant_immutable(optimizer *opt) {
 }
 
 /* -------------------------------------
- * Eliminate constant global
+ * Constant global
  * ------------------------------------- */
 
 bool strategy_constant_global(optimizer *opt) {
@@ -283,8 +268,29 @@ bool strategy_constant_global(optimizer *opt) {
     value konst;
     bool success=false;
     
-    if (globalinfolist_isconstant(optimize_globalinfolist(opt), DECODE_Bx(instr), &konst)) {
+    globalinfolist *glist = optimize_globalinfolist(opt);
+    if (globalinfolist_isconstant(glist, DECODE_Bx(instr), &konst)) {
         optimize_replacewithloadconstant(opt, DECODE_A(instr), konst);
+        globalinfolist_removeread(glist, DECODE_Bx(instr), optimize_getinstructionindx(opt));
+        success=true;
+    }
+    
+    return success;
+}
+
+/* -------------------------------------
+ * Unused global
+ * ------------------------------------- */
+
+bool strategy_unused_global(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    value konst;
+    bool success=false;
+    
+    globalinfolist *glist = optimize_globalinfolist(opt);
+    if (globalinfolist_countread(glist, DECODE_Bx(instr))==0) {
+        optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+        globalinfolist_removestore(glist, DECODE_Bx(instr), optimize_getinstructionindx(opt));
         success=true;
     }
     
@@ -307,6 +313,7 @@ optimizationstrategy strategies[] = {
     { OP_POW,  strategy_power_reduction,                  0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },
+    { OP_SGL,  strategy_unused_global,                    1 },
     { OP_END,  NULL,                                      0 }
 };
 

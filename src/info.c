@@ -14,7 +14,13 @@ void globalinfo_init(glblinfo *info) {
     info->contents=GLOBAL_EMPTY;
     info->type=MORPHO_NIL;
     info->val=MORPHO_NIL;
-    info->nread=0;
+    dictionary_init(&info->read);
+    dictionary_init(&info->src);
+}
+
+void globalinfo_clear(glblinfo *info) {
+    dictionary_clear(&info->read);
+    dictionary_clear(&info->src);
 }
 
 /** Allocate and initialize a global info list */
@@ -30,29 +36,27 @@ bool globalinfolist_init(globalinfolist *glist, int n) {
 
 /** Clears a globalinfolist */
 void globalinfolist_clear(globalinfolist *glist) {
-    MORPHO_FREE(glist->list);
+    if (glist->list) {
+        for (int i=0; i<glist->nglobals; i++) globalinfo_clear(glist->list+i);
+        MORPHO_FREE(glist->list);
+    }
     glist->list=NULL;
     glist->nglobals=0;
 }
 
-/** Indicate a read from a global */
-void globalinfolist_read(globalinfolist *glist, int gindx) {
-    glist->list[gindx].nread++;
-}
-
-/** Write a value to a global */
-void globalinfolist_writevalue(globalinfolist *glist, int gindx) {
+/** Sets the contents of a global to be a value */
+void globalinfolist_setvalue(globalinfolist *glist, int gindx) {
     glist->list[gindx].contents=GLOBAL_VALUE;
 }
 
-/** Write contents to a global */
-void globalinfolist_writeconstant(globalinfolist *glist, int gindx, value konst) {
+/** Sets the contents of a global to be a constant */
+void globalinfolist_setconstant(globalinfolist *glist, int gindx, value konst) {
     if (glist->list[gindx].contents==GLOBAL_EMPTY ||
                (glist->list[gindx].contents==GLOBAL_CONSTANT && // Ensure only one distinct constant is written
                 MORPHO_ISEQUAL(glist->list[gindx].val, konst))) {
         glist->list[gindx].contents=GLOBAL_CONSTANT;
         glist->list[gindx].val=konst;
-    } else globalinfolist_writevalue(glist, gindx);
+    } else globalinfolist_setvalue(glist, gindx);
 }
 
 /** Check if a global is constant */
@@ -64,11 +68,41 @@ bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst) {
     return false;
 }
 
+/** Adds a store instruction to a global */
+void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src) {
+    dictionary_insert(&glist->list[gindx].src, MORPHO_INTEGER(src), MORPHO_NIL);
+}
+
+/** Removes a store instruction to a global */
+void globalinfolist_removestore(globalinfolist *glist, int gindx, instructionindx src) {
+    dictionary_remove(&glist->list[gindx].src, MORPHO_INTEGER(src));
+}
+
+/** Count number of instructions that store to this global */
+unsigned int globalinfolist_countstore(globalinfolist *glist, int gindx) {
+    return glist->list[gindx].src.count;
+}
+
+/** Adds a read instruction to a global */
+void globalinfolist_read(globalinfolist *glist, int gindx, instructionindx src) {
+    dictionary_insert(&glist->list[gindx].read, MORPHO_INTEGER(src), MORPHO_NIL);
+}
+
+/** Removes a store instruction from a global */
+void globalinfolist_removeread(globalinfolist *glist, int gindx, instructionindx src) {
+    dictionary_remove(&glist->list[gindx].read, MORPHO_INTEGER(src));
+}
+
+/** Count number of instructions that read from this global */
+unsigned int globalinfolist_countread(globalinfolist *glist, int gindx) {
+    return glist->list[gindx].read.count;
+}
+
 /** Show the global info list */
 void globalinfolist_show(globalinfolist *glist) {
     printf("Globals:\n");
     for (int i=0; i<glist->nglobals; i++) {
-        printf("|\tr%u : ", i);
+        printf("|\tg%u : ", i);
         switch(glist->list[i].contents) {
             case GLOBAL_EMPTY: break;
             case GLOBAL_CONSTANT:
@@ -79,7 +113,7 @@ void globalinfolist_show(globalinfolist *glist) {
             case GLOBAL_VALUE:
                 printf("v ");
         }
-        printf(" u:%i ", glist->list[i].nread);
+        //printf(" u:%i ", glist->list[i].nread);
         if (!MORPHO_ISNIL(glist->list[i].type)) morpho_printvalue(NULL, glist->list[i].type);
         printf("\n");
     }

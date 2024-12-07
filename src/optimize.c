@@ -188,6 +188,11 @@ instruction optimize_getinstruction(optimizer *opt) {
     return opt->current;
 }
 
+/** Callback function to get the current instruction */
+instructionindx optimize_getinstructionindx(optimizer *opt) {
+    return opt->pc;
+}
+
 /** Gets the instruction at a given index; doesn't set this as the current instruction */
 instruction optimize_getinstructionat(optimizer *opt, instructionindx i) {
     return opt->prog->code.data[i];
