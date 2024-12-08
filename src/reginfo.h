@@ -58,6 +58,8 @@ int reginfolist_countuses(reginfolist *rlist, int rindx);
 void reginfolist_duplicate(reginfolist *rlist, int rindx);
 void reginfolist_unduplicate(reginfolist *rlist, int rindx);
 
+void reginfolist_invalidate(reginfolist *rlist, regcontents contents, indx indx);
+
 void reginfolist_show(reginfolist *rlist);
 
 #endif

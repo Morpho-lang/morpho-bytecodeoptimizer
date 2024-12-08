@@ -93,11 +93,13 @@ void lgl_trackingfn(optimizer *opt) {
 
 void sgl_trackingfn(optimizer *opt) {
     globalinfolist *glist = optimize_globalinfolist(opt);
-    
+
     instruction instr = optimize_getinstruction(opt);
     
     registerindx rindx=DECODE_A(instr);
     int gindx=DECODE_Bx(instr);
+    
+    reginfolist_invalidate(&opt->rlist, REG_GLOBAL, gindx); // Wipe registers that mirror the global
     
     indx kindx;
     if (optimize_isconstant(opt, rindx, &kindx)) {

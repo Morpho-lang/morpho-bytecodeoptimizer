@@ -122,6 +122,21 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
     }
 }
 
+/** Checks for any registers containing a given content type with specified index and converts to a value  */
+void reginfolist_invalidate(reginfolist *rlist, regcontents contents, indx ix) {
+    for (registerindx i=0; i<rlist->nreg; i++) { // Look over registers
+        regcontents icontents;
+        indx iindx;
+        
+        reginfolist_contents(rlist, i, &icontents, &iindx);
+        if (icontents==contents &&
+            iindx==ix) {
+            rlist->rinfo[i].contents=REG_VALUE;
+        }
+        
+    }
+}
+
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
     for (int i=0; i<rlist->nreg; i++) {
