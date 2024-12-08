@@ -317,7 +317,7 @@ bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
 
 /** Optimizations performed at the end of a code block */
 void optimize_dead_store_elimination(optimizer *opt, block *blk) {
-    printf("Ending block\n");
+    if (opt->verbose) printf("Ending block\n");
     for (int i=0; i<opt->rlist.nreg; i++) {
         instructionindx src;
         
@@ -326,9 +326,11 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src)) { // Identify the instruction that wrote it
             
-            instruction instr = optimize_getinstructionat(opt, src);
-            debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
-            printf("\n");
+            if (opt->verbose) {
+                instruction instr = optimize_getinstructionat(opt, src);
+                debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
+                printf("\n");
+            }
             
             optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
         }
