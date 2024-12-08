@@ -118,22 +118,6 @@ void cfgraph_show(cfgraph *graph) {
     }
 }
 
-/** Finds a block with instruction indx that lies within it
- * @param[in] opt - optimizer
- * @param[in] indx - index to find
- * @param[out] blk - returns a temporary pointer to the block
- * @returns true if found, false otherwise */
-/*bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
-    for (blockindx i=0; i<graph->count; i++) {
-        if (indx>=graph->data[i].start &&
-            indx<=graph->data[i].end) {
-            if (blk) *blk = graph->data+i;
-            return true;
-        }
-    }
-    return false;
-}*/
-
 int _blockcmp(const void *a, const void *b) {
     block *aa = (block *) a;
     block *bb = (block *) b;
@@ -253,6 +237,18 @@ bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, indx start, block **out) {
     return success;
 }
 
+/** Searches the block list for any block with an instruction indx **that lies within it** */
+bool cfgraphbuilder_findinblock(cfgraph *graph, instructionindx indx, block **blk) {
+    for (blockindx i=0; i<graph->count; i++) {
+        if (indx>=graph->data[i].start &&
+            indx<=graph->data[i].end) {
+            if (blk) *blk = graph->data+i;
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Adds a block to the control flow graph */
 bool cfgraphbuilder_addblock(cfgraphbuilder *bld, block *blk) {
     bool success=varray_blockadd(bld->out, blk, 1);
@@ -288,7 +284,8 @@ void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split
 void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     block *old;
     
-    if (cfgraphbuilder_lookupblock(bld, start, &old)) {
+    if (cfgraphbuilder_lookupblock(bld, start, &old) ||
+        cfgraphbuilder_findinblock(bld->out, start, &old)) {
         cfgraphbuilder_split(bld, old, start);
     } else {
         cfgraphbuilder_push(bld, start);
