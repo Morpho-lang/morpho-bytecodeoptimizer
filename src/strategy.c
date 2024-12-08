@@ -207,6 +207,15 @@ bool strategy_dead_store_elimination(optimizer *opt) {
  * Constant Immutable Constructor
  * ------------------------------------- */
 
+bool _isimmutable(value v) {
+    return (MORPHO_ISEQUAL(v, typebool) ||
+            MORPHO_ISEQUAL(v, typerange) ||
+            MORPHO_ISEQUAL(v, typestring) ||
+            MORPHO_ISEQUAL(v, typetuple) ||
+            MORPHO_ISEQUAL(v, typeint) ||
+            MORPHO_ISEQUAL(v, typefloat));
+}
+
 bool strategy_constant_immutable(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     
@@ -226,7 +235,9 @@ bool strategy_constant_immutable(optimizer *opt) {
     CHECK(MORPHO_ISBUILTINFUNCTION(fn) &&
           (MORPHO_GETBUILTINFUNCTION(fn)->flags & MORPHO_FN_CONSTRUCTOR));
     
-    // Todo: Should check for immutability!
+    // Todo: Need a better check for immutability!
+    value type = signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(fn)->sig);
+    if (!_isimmutable(type)) return false;
         
     // A program that evaluates the required op with the selected constants.
     varray_instruction prog;

@@ -446,7 +446,7 @@ MORPHO_BEGINCLASS(Bool)
 MORPHO_METHOD(MORPHO_PRINT_METHOD, Bool_prnt, MORPHO_FN_FLAGSEMPTY)
 MORPHO_ENDCLASS
 
-value typeint, typefloat, typestring, typebool, typeclosure;
+value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -468,6 +468,15 @@ void bytecodeoptimizer_initialize(void) {
     
     objectstring closurelabel = MORPHO_STATICSTRING("Closure");
     typeclosure = builtin_findclass(MORPHO_OBJECT(&closurelabel));
+    
+    objectstring rangelabel = MORPHO_STATICSTRING("Range");
+    typerange = builtin_findclass(MORPHO_OBJECT(&rangelabel));
+    
+    objectstring listlabel = MORPHO_STATICSTRING("List");
+    typelist = builtin_findclass(MORPHO_OBJECT(&listlabel));
+    
+    objectstring tuplelabel = MORPHO_STATICSTRING("Tuple");
+    typetuple = builtin_findclass(MORPHO_OBJECT(&tuplelabel));
 }
 
 void bytecodeoptimizer_finalize(void) {

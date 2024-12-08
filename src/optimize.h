@@ -50,7 +50,7 @@ typedef void (*usagecallbackfn) (registerindx r, void *ref);
 /** Function that can be called by the optimizer to track register usage */
 typedef void (*opcodeusagefn) (instruction instr, block *blk, usagecallbackfn usefn, void *ref);
 
-extern value typeint, typefloat, typestring, typebool, typeclosure;
+extern value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
 
 /* **********************************************************************
  * Interface for optimization strategies

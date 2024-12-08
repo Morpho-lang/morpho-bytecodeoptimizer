@@ -221,7 +221,7 @@ if MT:
     command += " -w4" 
     print("Running tests with 4 threads")
 
-files=glob.glob('tests/**.'+ext, recursive=True)
+files=glob.glob('tests/**/**.'+ext, recursive=True)
 with open(failedTestsFileName,'w') as testLog:
 
     for f in files:
