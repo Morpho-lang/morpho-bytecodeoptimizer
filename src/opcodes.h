@@ -21,7 +21,7 @@ typedef unsigned int opcodeflags;
 #define OPCODE_USES_RANGEBC     (1<<5)
 #define OPCODE_ENDSBLOCK        (1<<6)
 #define OPCODE_BRANCH           (1<<7)
-#define OPCODE_CONDITIONAL      (1<<8)
+#define OPCODE_NEWBLOCKAFTER      (1<<8)
 #define OPCODE_BRANCH_TABLE     (1<<9)
 #define OPCODE_TERMINATING      (1<<10)
 #define OPCODE_SIDEEFFECTS      (1<<11)

@@ -82,8 +82,7 @@ bool optimize_typefromvalue(value val, value *type) {
 
 /** Callback function to get a constant from the current constant table */
 value optimize_getconstant(optimizer *opt, indx i) {
-    if (i>opt->currentblk->func->konst.count) return MORPHO_NIL;
-    return opt->currentblk->func->konst.data[i];
+    return block_getconstant(opt->currentblk, i);
 }
 
 /** Adds a constant to the current constant table */

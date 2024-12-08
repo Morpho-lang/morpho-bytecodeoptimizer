@@ -71,6 +71,12 @@ bool block_isentry(block *b) {
     return (b->func) && (b->func->entry == (indx) b->start);
 }
 
+/** Get a constant from a block */
+value block_getconstant(block *b, indx i) {
+    if (i>b->func->konst.count) return MORPHO_NIL;
+    return b->func->konst.data[i];
+}
+
 /* **********************************************************************
  * Control flow graph data structure
  * ********************************************************************** */
@@ -294,8 +300,8 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
         instruction instr = cfgraphbuilder_fetch(bld, i);
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
-        // Conditional branches generate a block immediately afterwards
-        if (flags & OPCODE_CONDITIONAL) cfgraphbuilder_branchto(bld, i+1);
+        // Some opcodes enerate a block immediately afterwards
+        if (flags & OPCODE_NEWBLOCKAFTER) cfgraphbuilder_branchto(bld, i+1);
         
         // Branches generate a block at the branch target
         if (flags & OPCODE_BRANCH) {
@@ -380,7 +386,7 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, block *blk) {
         block_setdest(blk, dest);
         cfgraphbuilder_setsrc(bld, blk->start, dest);
         
-        if (!(flags & OPCODE_CONDITIONAL)) return; // Unconditional branches link only to their dest
+        if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
     }
     
     block_setdest(blk, blk->end+1); // Link to following block

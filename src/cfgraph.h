@@ -53,6 +53,8 @@ void block_setdest(block *b, instructionindx indx);
 
 bool block_isentry(block *b);
 
+value block_getconstant(block *b, indx i);
+
 void cfgraph_init(cfgraph *graph);
 void cfgraph_clear(cfgraph *graph);
 void cfgraph_show(cfgraph *graph);
