@@ -165,7 +165,7 @@ void lpr_trackingfn(optimizer *opt) {
 
 void lix_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    optimize_writevalue(opt, DECODE_A(instr));
+    optimize_writevalue(opt, DECODE_B(instr));
 }
 
 void closure_trackingfn(optimizer *opt) {
