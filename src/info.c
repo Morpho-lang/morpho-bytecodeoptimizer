@@ -12,7 +12,6 @@
 
 void globalinfo_init(glblinfo *info) {
     info->contents=GLOBAL_EMPTY;
-    info->type=MORPHO_NIL;
     info->val=MORPHO_NIL;
     dictionary_init(&info->read);
     dictionary_init(&info->src);
@@ -69,9 +68,31 @@ bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst) {
 }
 
 /** Adds a store instruction to a global */
-void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src) {
-    dictionary_insert(&glist->list[gindx].src, MORPHO_INTEGER(src), MORPHO_NIL);
+void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src, value type) {
+    dictionary_insert(&glist->list[gindx].src, MORPHO_INTEGER(src), type);
 }
+
+/** Gets the type of a global */
+value globalinfolist_type(globalinfolist *glist, int gindx) {
+    dictionary *dict = &glist->list[gindx].src;
+    value type = MORPHO_NIL;
+    
+    for (int i=0; i<dict->capacity; i++) {
+        if (!MORPHO_ISNIL(dict->contents[i].key)) {
+            value thistype = dict->contents[i].val;
+            if (MORPHO_ISNIL(thistype)) { // An unknown type always wins
+                return thistype;
+            } else if (MORPHO_ISNIL(type)) {
+                type = thistype;
+            } else if (!MORPHO_ISSAME(type, thistype)) {
+                return MORPHO_NIL; // If there's a conflict, type is unknown
+            }
+        }
+    }
+    
+    return type;
+}
+
 
 /** Removes a store instruction to a global */
 void globalinfolist_removestore(globalinfolist *glist, int gindx, instructionindx src) {
@@ -98,12 +119,12 @@ unsigned int globalinfolist_countread(globalinfolist *glist, int gindx) {
     return glist->list[gindx].read.count;
 }
 
-void globalinflist_showdict(char *label, dictionary *dict) {
+void _showdict(char *label, dictionary *dict) {
     printf("(%s ", label);
     for (unsigned int i=0; i<dict->capacity; i++) {
         if (!MORPHO_ISNIL(dict->contents[i].key)) printf("%i ", MORPHO_GETINTEGERVALUE(dict->contents[i].key));
     }
-    printf(")");
+    printf(") ");
 }
 
 /** Show the global info list */
@@ -121,12 +142,11 @@ void globalinfolist_show(globalinfolist *glist) {
             case GLOBAL_VALUE:
                 printf("v ");
         }
-        globalinflist_showdict("r:", &glist->list[i].read);
-        printf(" ");
-        globalinflist_showdict("w:", &glist->list[i].src);
+        _showdict("r:", &glist->list[i].read);
+        _showdict("w:", &glist->list[i].src);
         
-        if (!MORPHO_ISNIL(glist->list[i].type)) morpho_printvalue(NULL, glist->list[i].type);
+        value type = globalinfolist_type(glist, i);
+        if (!MORPHO_ISNIL(type)) morpho_printvalue(NULL, type);
         printf("\n");
     }
-    
 }

@@ -76,9 +76,16 @@ void lct_trackingfn(optimizer *opt) {
 
 void lgl_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    registerindx rindx = DECODE_A(instr);
+    optimize_write(opt, rindx, REG_GLOBAL, DECODE_Bx(instr));
     
-    optimize_write(opt, DECODE_A(instr), REG_GLOBAL, DECODE_Bx(instr));
-    globalinfolist_read(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
+    globalinfolist *glist = optimize_globalinfolist(opt);
+    int gindx = DECODE_Bx(instr);
+    globalinfolist_read(glist, gindx, optimize_getinstructionindx(opt));
+    
+    value type = MORPHO_NIL;
+    if (opt->pass>0) type=globalinfolist_type(glist, gindx); // We can only do this once the entire code has been seen at least once 
+    optimize_settype(opt, rindx, type);
 }
 
 void sgl_trackingfn(optimizer *opt) {
@@ -93,7 +100,8 @@ void sgl_trackingfn(optimizer *opt) {
         globalinfolist_setconstant(glist, gindx, konst);
     } else globalinfolist_setvalue(glist, gindx);
     
-    globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt));
+    value type = optimize_type(opt, DECODE_A(instr));
+    globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt), type);
 }
 
 void arith_trackingfn(optimizer *opt) {

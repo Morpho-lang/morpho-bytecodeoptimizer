@@ -22,7 +22,6 @@ typedef enum {
 
 typedef struct {
     globalcontents contents; /** What the global contains */
-    value type; /** Type information if known  */
     value val; /** Value from constant */
     dictionary src; /** A dictionary of instruction indices that store to this global */
     dictionary read; /** A dictionary of instruction indices that read from this global */
@@ -41,7 +40,10 @@ void globalinfolist_setconstant(globalinfolist *glist, int gindx, value konst);
 
 bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst);
 
-void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src);
+void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src, value type);
+
+value globalinfolist_type(globalinfolist *glist, int gindx);
+
 void globalinfolist_removestore(globalinfolist *glist, int gindx, instructionindx src);
 unsigned int globalinfolist_countstore(globalinfolist *glist, int gindx);
 

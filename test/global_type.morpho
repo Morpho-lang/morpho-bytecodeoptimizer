@@ -1,0 +1,15 @@
+// Type propagation for globals 
+
+import bytecodeoptimizer
+
+var a = 1
+
+fn foo() {
+  return a + a 
+} 
+
+print foo() // expect: 2
+
+a = 2 
+
+print foo() // expect: 4
