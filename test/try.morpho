@@ -1,0 +1,13 @@
+// Try/Catch statements
+
+import bytecodeoptimizer
+
+try {
+  for (i in 1..3) {
+    if (i==2) Error.throw("Foo", "Foo")
+  }
+} catch {
+  "Foo" : print "Caught"
+}
+
+print "Done"

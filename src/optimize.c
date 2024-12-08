@@ -342,6 +342,8 @@ bool optimize_block(optimizer *opt, block *blk) {
     opt->currentblk=blk;
     
     do {
+        // Todo: Resolve register state from source blocks
+        
         opt->nchanged=0;
         
         if (opt->verbose) printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);

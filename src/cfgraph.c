@@ -266,6 +266,22 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     }
 }
 
+/** Finds and processes a branch table*/
+void cfgraphbuilder_branchtable(cfgraphbuilder *bld, indx kindx) {
+    value target = bld->currentfn->konst.data[kindx];
+    
+    if (MORPHO_ISDICTIONARY(target)) {
+        dictionary *dict = &MORPHO_GETDICTIONARY(target)->dict;
+        
+        for (int i=0; i<dict->capacity; i++) {
+            if (!MORPHO_ISNIL(dict->contents[i].key) &&
+                MORPHO_ISINTEGER(dict->contents[i].val)) {
+                cfgraphbuilder_branchto(bld, MORPHO_GETINTEGERVALUE(dict->contents[i].val));
+            }
+        }
+    }
+}
+
 /** Creates a new basic block starting at a given instruction */
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
@@ -287,6 +303,12 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
             cfgraphbuilder_branchto(bld, i+1+branchby);
         }
 
+        // Branch tables generate blocks at their targets
+        if (flags & OPCODE_BRANCH_TABLE) {
+            indx kindx = DECODE_Bx(instr);
+            cfgraphbuilder_branchtable(bld, kindx);
+        }
+        
         // Terminate at a block ending instruction
         if (flags & OPCODE_ENDSBLOCK) break;
         
