@@ -212,8 +212,8 @@ bool strategy_constant_immutable(optimizer *opt) {
     
     // Ensure call target and arguments are all constants
     indx cindx[nargs+1];
-    for (registerindx r=rA; r<rA + nargs + 1; r++) {
-        CHECK(optimize_isconstant(opt, r, cindx + r - rA));
+    for (int i=0; i<=nargs; i++) {
+        CHECK(optimize_isconstant(opt, rA + i, cindx + i));
     }
     
     // Retrieve the call target
