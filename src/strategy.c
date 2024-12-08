@@ -99,7 +99,10 @@ bool strategy_constant_folding(optimizer *opt) {
     
     // Evaluate the program
     value new = MORPHO_NIL;
-    CHECK(optimize_evalsubprogram(opt, ilist, 0, &new));
+    if (!optimize_evalsubprogram(opt, ilist, 0, &new)) {
+        optimize_error(opt, ERROR_ALLOCATIONFAILED);
+        return false;
+    }
     
     // Replace CALL with an appropriate LCT
     if (!optimize_replacewithloadconstant(opt, DECODE_A(instr), new)) {
@@ -311,7 +314,7 @@ optimizationstrategy strategies[] = {
  * Apply relevant strategies
  * ********************************************************************** */
 
-void strategy_optimizeinstruction(optimizer *opt, int maxlevel) {
+bool strategy_optimizeinstruction(optimizer *opt, int maxlevel) {
     instruction op = DECODE_OP(optimize_getinstruction(opt));
     
     for (int i=0; strategies[i].match!=OP_END; i++) {
@@ -319,7 +322,9 @@ void strategy_optimizeinstruction(optimizer *opt, int maxlevel) {
              strategies[i].match==OP_ANY) &&
              strategies[i].level <= maxlevel) {
             
-            if ((strategies[i].fn) (opt)) break; // Terminate if the strategy function succeeds
+            if ((strategies[i].fn) (opt)) return true; // Terminate if the strategy function succeeds
         }
     }
+    
+    return false;
 }

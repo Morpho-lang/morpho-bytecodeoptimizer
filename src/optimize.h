@@ -21,6 +21,8 @@
 typedef struct {
     program *prog;
     
+    error err; 
+    
     cfgraph graph;
 
     reginfolist rlist; /** Used to track register state */
@@ -53,6 +55,9 @@ extern value typeint, typefloat, typestring, typebool, typeclosure;
 /* **********************************************************************
  * Interface for optimization strategies
  * ********************************************************************** */
+
+void optimize_error(optimizer *opt, errorid id, ...);
+bool optimize_checkerror(optimizer *opt);
 
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
 void optimize_writevalue(optimizer *opt, registerindx i);

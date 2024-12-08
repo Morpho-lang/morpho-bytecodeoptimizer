@@ -4,6 +4,8 @@
  *  @brief Optimizer for compiled morpho bytecode
 */
 
+#include <stdarg.h>
+
 #include "morphocore.h"
 #include "optimize.h"
 #include "opcodes.h"
@@ -22,6 +24,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     opt->prog=prog;
     opt->pass=0;
     
+    error_init(&opt->err);
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, 0);
     globalinfolist_init(&opt->glist, prog->globals.count);
@@ -38,6 +41,7 @@ void optimizer_init(optimizer *opt, program *prog) {
 
 /** Clears an optimizer data structure */
 void optimize_clear(optimizer *opt) {
+    error_clear(&opt->err);
     cfgraph_clear(&opt->graph);
     globalinfolist_clear(&opt->glist);
     
@@ -48,6 +52,19 @@ void optimize_clear(optimizer *opt) {
 /* **********************************************************************
  * Optimize a code block
  * ********************************************************************** */
+
+/** Raise an error with the optimizer */
+void optimize_error(optimizer *opt, errorid id, ...) {
+    va_list args;
+    va_start(args, id);
+    morpho_writeerrorwithidvalist(&opt->err, id, NULL, 0, ERROR_POSNUNIDENTIFIABLE, args);
+    va_end(args);
+}
+
+/** Checks whether an error occurred */
+bool optimize_checkerror(optimizer *opt) {
+    return (opt->err.cat!=ERROR_NONE);
+}
 
 /** Fetches the instruction at index i and sets this as the current instruction */
 instruction optimize_fetch(optimizer *opt, instructionindx i) {
@@ -356,7 +373,12 @@ bool optimize_block(optimizer *opt, block *blk) {
             optimize_usage(opt);
             
             // Apply relevant optimization strategies given the pass number
-            strategy_optimizeinstruction(opt, opt->pass);
+            if (strategy_optimizeinstruction(opt, opt->pass)) {
+                optimize_usage(opt); // Conservatively mark anything new as used
+            }
+            
+            // Check if an error occurred and quit if it did
+            if (optimize_checkerror(opt)) return false;
             
             // Perform tracking to track register contents from the optimized instruction
             opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
@@ -375,7 +397,7 @@ bool optimize_block(optimizer *opt, block *blk) {
 void optimize_pass(optimizer *opt, int n) {
     opt->pass=n; 
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
-    for (int i=0; i<opt->graph.count; i++) optimize_block(opt, &opt->graph.data[i]);
+    for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) optimize_block(opt, &opt->graph.data[i]);
 }
 
 /* **********************************************************************
@@ -394,12 +416,16 @@ bool optimize(program *in) {
     cfgraph_build(in, &opt.graph, opt.verbose);
     
     // Perform optimization passes
-    for (int i=0; i<3; i++) optimize_pass(&opt, i);
+    for (int i=0; i<3 && !optimize_checkerror(&opt); i++) {
+        optimize_pass(&opt, i);
+    }
     
     if (opt.verbose) globalinfolist_show(&opt.glist);
     
     // Layout final code and repair associated data structures
-    layout(&opt);
+    if (!optimize_checkerror(&opt)) {
+        layout(&opt);
+    }
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);
     

@@ -20,4 +20,4 @@ typedef struct {
 } optimizationstrategy;
 
 /** Apply all relevant strategies at an instruction */
-void strategy_optimizeinstruction(optimizer *opt, int maxlevel);
+bool strategy_optimizeinstruction(optimizer *opt, int maxlevel);
