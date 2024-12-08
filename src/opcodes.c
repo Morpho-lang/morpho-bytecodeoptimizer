@@ -49,8 +49,11 @@ void invoke_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref
 void closure_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx B = DECODE_B(instr); // Get which registers are used from the upvalue prototype
 
-    varray_upvalue *v = &blk->func->prototype.data[B];
-    for (unsigned int i=0; i<v->count; i++) fn((registerindx) v->data[i].reg, ref);
+    varray_upvalue *prototype = &blk->func->prototype.data[B];
+    for (unsigned int i=0; i<prototype->count; i++) {
+        upvalue *up = &prototype->data[i];
+        if (up->islocal) fn((registerindx) up->reg, ref);
+    }
 }
 
 /* **********************************************************************
@@ -238,7 +241,7 @@ opcodeinfo opcodetable[] = {
     { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, lix_trackingfn, NULL, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
     
-    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn, NULL, NULL },
+    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn, closure_usagefn, NULL },
     
     { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL, NULL },
     
