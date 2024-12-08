@@ -1,0 +1,14 @@
+// Reduce power to multiply 
+
+import bytecodeoptimizer
+
+var N = 1000000
+var M = 10
+
+fn sqr(x) { return x*x }
+
+for (k in 1..N) {
+  for (i in 1..M) {
+    sqr(0.1)
+  }
+}

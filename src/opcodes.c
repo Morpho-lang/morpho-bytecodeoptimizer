@@ -93,14 +93,16 @@ void sgl_trackingfn(optimizer *opt) {
     
     instruction instr = optimize_getinstruction(opt);
     
+    registerindx rindx=DECODE_A(instr);
     int gindx=DECODE_Bx(instr);
+    
     indx kindx;
-    if (optimize_isconstant(opt, gindx, &kindx)) {
+    if (optimize_isconstant(opt, rindx, &kindx)) {
         value konst = optimize_getconstant(opt, kindx);
         globalinfolist_setconstant(glist, gindx, konst);
     } else globalinfolist_setvalue(glist, gindx);
     
-    value type = optimize_type(opt, DECODE_A(instr));
+    value type = optimize_type(opt, rindx);
     globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt), type);
 }
 
