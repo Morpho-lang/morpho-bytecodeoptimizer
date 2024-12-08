@@ -355,12 +355,12 @@ bool optimize_block(optimizer *opt, block *blk) {
             // Apply relevant optimization strategies given the pass number
             strategy_optimizeinstruction(opt, opt->pass);
             
+            // Update usage
+            optimize_usage(opt);
+            
             // Perform tracking to track register contents
             opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
             if (trackingfn) trackingfn(opt);
-            
-            // Update usage
-            optimize_usage(opt);
             
             if (opt->verbose) reginfolist_show(&opt->rlist);
         }

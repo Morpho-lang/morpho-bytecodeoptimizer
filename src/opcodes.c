@@ -131,6 +131,7 @@ void arith_trackingfn(optimizer *opt) {
 
 void cmp_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    optimize_writevalue(opt, DECODE_A(instr));
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
@@ -166,11 +167,13 @@ void lix_trackingfn(optimizer *opt) {
 
 void closure_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    optimize_writevalue(opt, DECODE_A(instr));
     optimize_settype(opt, DECODE_A(instr), typeclosure);
 }
 
 void cat_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    optimize_writevalue(opt, DECODE_A(instr));
     optimize_settype(opt, DECODE_A(instr), typestring);
 }
 
