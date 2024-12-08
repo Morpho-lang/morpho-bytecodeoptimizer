@@ -123,7 +123,7 @@ void cfgraph_show(cfgraph *graph) {
  * @param[in] indx - index to find
  * @param[out] blk - returns a temporary pointer to the block
  * @returns true if found, false otherwise */
-bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
+/*bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
     for (blockindx i=0; i<graph->count; i++) {
         if (indx>=graph->data[i].start &&
             indx<=graph->data[i].end) {
@@ -132,7 +132,7 @@ bool cfgraph_find(cfgraph *graph, instructionindx indx, block **blk) {
         }
     }
     return false;
-}
+}*/
 
 int _blockcmp(const void *a, const void *b) {
     block *aa = (block *) a;
@@ -192,8 +192,12 @@ void cfgraphbuilder_clear(cfgraphbuilder *bld) {
     varray_valueclear(&bld->compontentworklist);
 }
 
-/** Adds a block to the worklist */
+/** Adds a block to the worklist, also recording its presence in the blkindx dictionary */
 void cfgraphbuilder_push(cfgraphbuilder *bld, instructionindx start) {
+    // Ensure existing blocks are never processes twice
+    if (dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), NULL)) return;
+    dictionary_insert(&bld->blkindx, MORPHO_INTEGER(start), MORPHO_NIL);
+    
     varray_instructionindxadd(&bld->worklist, &start, 1);
 }
 
@@ -222,11 +226,30 @@ objectfunction *cfgraphbuilder_currentfn(cfgraphbuilder *bld) {
     return bld->currentfn;
 }
 
-/** Lookup a block from a given block index  */
-bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, indx start, indx *out) {
+/** Checks if a block indx is in the blkindex dictionary  */
+bool cfgraphbuilder_checkblock(cfgraphbuilder *bld, indx start) {
     value val;
-    bool success = dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), &val);
-    if (success && out) *out = MORPHO_GETINTEGERVALUE(val);
+    return dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), &val);
+}
+
+/** Lookup a block indx from a given block index  */
+bool cfgraphbuilder_lookupblockindx(cfgraphbuilder *bld, indx start, indx *out) {
+    value val;
+    
+    if (!(dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), &val) &&
+          MORPHO_ISINTEGER(val))) return false;
+    
+    if (out) *out = MORPHO_GETINTEGERVALUE(val);
+    return true;
+}
+
+/** Lookup a block from the block index list */
+bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, indx start, block **out) {
+    indx bindx;
+    bool success=cfgraphbuilder_lookupblockindx(bld, start, &bindx);
+    if (success) {
+        if (out) *out = &bld->out->data[bindx];
+    }
     return success;
 }
 
@@ -264,8 +287,8 @@ void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split
     or creates a new block */
 void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     block *old;
-        
-    if (cfgraph_find(bld->out, start, &old)) {
+    
+    if (cfgraphbuilder_lookupblock(bld, start, &old)) {
         cfgraphbuilder_split(bld, old, start);
     } else {
         cfgraphbuilder_push(bld, start);
@@ -318,8 +341,8 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
         // Terminate at a block ending instruction
         if (flags & OPCODE_ENDSBLOCK) break;
         
-        // Check if we have reached the start of an existing block
-        if (cfgraphbuilder_lookupblock(bld, i+1, NULL)) break;
+        // Check if we have reached the start of an existing or planned block
+        if (cfgraphbuilder_checkblock(bld, i+1)) break;
     }
         
     blk.end=i; // Record end point
@@ -370,7 +393,7 @@ void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
 /** Finds the destination block dest and add src to its source list */
 void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx src, instructionindx dest) {
     block *blk;
-    if (cfgraph_find(bld->out, dest, &blk)) block_setsource(blk, src);
+    if (cfgraphbuilder_lookupblock(bld, dest, &blk)) block_setsource(blk, src);
 }
 
 /** Determines the destination blocks for a given block  */

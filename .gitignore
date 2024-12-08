@@ -3,3 +3,4 @@
 build-xcode/*
 build/*
 lib/*
+test/testsuite/FailedTests.txt
