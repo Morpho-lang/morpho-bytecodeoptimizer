@@ -426,7 +426,7 @@ void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
  * Build control flow graph
  * ********************************************************************** */
 
-/** Builds a control flow graph */
+/** Builds a control flow graph; the blocks are sorted in order  */
 void cfgraph_build(program *in, cfgraph *out, bool verbose) {
     cfgraphbuilder bld;
     
@@ -452,6 +452,8 @@ void cfgraph_build(program *in, cfgraph *out, bool verbose) {
     }
     
     cfgraphbuilder_clear(&bld);
+    
+    cfgraph_sort(out);
     
     if (bld.verbose) cfgraph_show(out);
 }

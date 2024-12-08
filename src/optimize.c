@@ -286,12 +286,33 @@ void optimize_disassemble(optimizer *opt) {
     printf("\n");
 }
 
-/** Checks usage of a register by subsequent blocks; returns true if it's used */
-bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
+bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary *checked) {
+    dictionary_insert(checked, MORPHO_INTEGER(blk->start), MORPHO_NIL); // Mark this dictionary as checked
     
-    
+    for (int i=0; i<blk->dest.capacity; i++) {
+        value key = blk->dest.contents[i].key;
+        block *dest;
+        
+        if (MORPHO_ISINTEGER(key) &&
+            !dictionary_get(checked, key, NULL) && // Ensure the block hasn't been checked
+            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
+            if (block_uses(dest, rindx)) return true;
+            
+            if (!block_writes(dest, rindx) &&
+                _checkdestusage(opt, dest, rindx, checked)) return true;
+        }
+    }
     
     return false;
+}
+
+/** Checks usage of a register by subsequent blocks; returns true if it's used */
+bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
+    dictionary checked;
+    dictionary_init(&checked);
+    bool success=_checkdestusage(opt, blk, rindx, &checked);
+    dictionary_clear(&checked);
+    return success; 
 }
 
 /** Optimizations performed at the end of a code block */
