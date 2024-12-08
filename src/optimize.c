@@ -352,13 +352,13 @@ bool optimize_block(optimizer *opt, block *blk) {
             instruction instr = optimize_fetch(opt, i);
             if (opt->verbose) optimize_disassemble(opt);
             
+            // Update usage. @warning: This MUST be before optimization strategies so that usage information from this instruction is correct
+            optimize_usage(opt);
+            
             // Apply relevant optimization strategies given the pass number
             strategy_optimizeinstruction(opt, opt->pass);
             
-            // Update usage
-            optimize_usage(opt);
-            
-            // Perform tracking to track register contents
+            // Perform tracking to track register contents from the optimized instruction
             opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
             if (trackingfn) trackingfn(opt);
             

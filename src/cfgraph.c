@@ -149,7 +149,7 @@ void cfgraph_sort(cfgraph *graph) {
 bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out) {
     block key = { .start = start };
     block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockcmp);
-    if (*out) *out=srch;
+    if (out) *out=srch;
     return srch;
 }
 
