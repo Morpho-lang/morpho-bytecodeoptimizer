@@ -240,7 +240,7 @@ opcodeinfo opcodetable[] = {
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
     { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL, NULL },
-    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, lix_trackingfn, NULL, NULL },
+    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_SIDEEFFECTS, lix_trackingfn, NULL, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
     
     { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A | OPCODE_SIDEEFFECTS, closure_trackingfn, closure_usagefn, NULL },
