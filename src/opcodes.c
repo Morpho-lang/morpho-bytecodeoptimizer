@@ -236,7 +236,7 @@ opcodeinfo opcodetable[] = {
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL, NULL },
     { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, lgl_replacementfn },
     { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, sgl_replacementfn },
-    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C, lpr_trackingfn, NULL, NULL },
+    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lpr_trackingfn, NULL, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
     { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL, NULL },
