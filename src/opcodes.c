@@ -243,7 +243,7 @@ opcodeinfo opcodetable[] = {
     { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC, lix_trackingfn, NULL, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
     
-    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A, closure_trackingfn, closure_usagefn, NULL },
+    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A | OPCODE_SIDEEFFECTS, closure_trackingfn, closure_usagefn, NULL },
     
     { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL, NULL },
     
