@@ -1,0 +1,14 @@
+// Break register cycles 
+// This doesn't trigger the bug correctly yet...
+
+import bytecodeoptimizer
+
+fn foo() {
+  var a = 1 
+  var b = a 
+  a = b
+}
+
+foo() 
+
+print "Done" // Expect: Done

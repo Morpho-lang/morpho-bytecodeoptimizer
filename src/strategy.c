@@ -301,6 +301,24 @@ bool strategy_unused_global(optimizer *opt) {
     return success;
 }
 
+/* -------------------------------------
+ * Load index list
+ * ------------------------------------- */
+
+bool strategy_load_index_list(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    bool success=false;
+    
+    value type = optimize_type(opt, DECODE_A(instr));
+    
+    if (MORPHO_ISSAME(type, typelist)) {
+        optimize_replaceinstruction(opt, ENCODE(OP_LIXL, DECODE_B(instr), DECODE_A(instr), DECODE_B(instr)));
+        success=true; 
+    }
+    
+    return success;
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
@@ -313,6 +331,7 @@ optimizationstrategy strategies[] = {
     { OP_LCT,  strategy_duplicate_load,                   0 },
     { OP_LGL,  strategy_duplicate_load,                   0 },
     { OP_LUP,  strategy_duplicate_load,                   0 },
+    { OP_LIX,  strategy_load_index_list,                  0 },
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     

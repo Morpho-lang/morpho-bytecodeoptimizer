@@ -148,7 +148,13 @@ void call_trackingfn(optimizer *opt) {
     indx kindx;
     if (optimize_isconstant(opt, a, &kindx)) {
         value konst = optimize_getconstant(opt, kindx);
-        if (MORPHO_ISCLASS(konst)) type=konst;
+        if (MORPHO_ISCLASS(konst)) {
+            type=konst;
+        } else if (MORPHO_ISFUNCTION(konst)) {
+            type=signature_getreturntype(&MORPHO_GETFUNCTION(konst)->sig);
+        } else if (MORPHO_ISBUILTINFUNCTION(konst)) {
+            type=signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(konst)->sig);
+        }
     }
     
     optimize_writevalue(opt, a);
@@ -168,6 +174,11 @@ void lpr_trackingfn(optimizer *opt) {
 void lix_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_writevalue(opt, DECODE_B(instr));
+}
+
+void lixl_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    optimize_writevalue(opt, DECODE_A(instr));
 }
 
 void closure_trackingfn(optimizer *opt) {
@@ -241,6 +252,7 @@ opcodeinfo opcodetable[] = {
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
     { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL, NULL },
     { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_SIDEEFFECTS, lix_trackingfn, NULL, NULL },
+    { OP_LIXL, "lixl", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lixl_trackingfn, NULL, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
     
     { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A | OPCODE_SIDEEFFECTS, closure_trackingfn, closure_usagefn, NULL },
