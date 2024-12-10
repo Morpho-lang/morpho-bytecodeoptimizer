@@ -339,6 +339,7 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
         
         if (!optimize_isempty(opt, i) &&                // Does the register contain something?
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
+            reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src)) { // Identify the instruction that wrote it
             
@@ -353,17 +354,31 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     }
 }
 
+/** Sets the contents of registers from knowledge of the function signature */
+void optimize_signature(optimizer *opt) {
+    objectfunction *func = optimize_currentblock(opt)->func;
+    
+    value type;
+    for (registerindx i=0; i<func->nargs; i++) {
+        reginfolist_write(&opt->rlist, func->entry, i+1, REG_PARAMETER, 0);
+        if (signature_getparamtype(&func->sig, i, &type)) {
+            reginfolist_settype(&opt->rlist, i+1, type);
+        }
+    }
+}
+
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
     opt->currentblk=blk;
     
     do {
-        // Todo: Resolve register state from source blocks
-        
         opt->nchanged=0;
         
         if (opt->verbose) printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
         reginfolist_init(&opt->rlist, blk->func->nregs);
+        
+        // Todo: Resolve register state from source blocks
+        if (block_isentry(blk)) optimize_signature(opt);
         
         for (instructionindx i=blk->start; i<=blk->end; i++) {
             instruction instr = optimize_fetch(opt, i);

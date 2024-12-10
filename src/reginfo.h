@@ -16,6 +16,7 @@
 /** Enumerated type recording where the contents of a register came from */
 typedef enum {
     REG_EMPTY,    /** Empty register */
+    REG_PARAMETER,/** Contents are a function parameter */
     REG_REGISTER, /** Contents moved from another register */
     REG_CONSTANT, /** Contents came from the constant table */
     REG_GLOBAL,   /** Contents came from a global */

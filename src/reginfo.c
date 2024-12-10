@@ -143,6 +143,7 @@ void reginfolist_show(reginfolist *rlist) {
         printf("|\tr%u :", i);
         switch (rlist->rinfo[i].contents) {
             case REG_EMPTY: printf(" \n"); continue;
+            case REG_PARAMETER: printf(" p"); break; 
             case REG_VALUE: printf(" v"); break;
             case REG_REGISTER: printf(" r%td", rlist->rinfo[i].indx); break;
             case REG_GLOBAL: printf(" g%td", rlist->rinfo[i].indx); break;

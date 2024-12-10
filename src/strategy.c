@@ -160,7 +160,7 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
 bool strategy_register_replacement(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     instruction op = DECODE_OP(instr);
-    CHECK(op>=OP_ADD && op<=OP_LE); // Quickly eliminate non-arithmetic instructions
+    CHECK(op>=OP_ADD && op<=OP_LE || op==OP_LIXL); // Quickly eliminate non-arithmetic instructions
     
     bool success=false;
     
