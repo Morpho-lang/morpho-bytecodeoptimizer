@@ -3,9 +3,11 @@
 import bytecodeoptimizer
 
 fn get(List x, y) {
-  return x[y]
+  var a = 0
+  for (i in 0..y) a+=x[i]
+  return a 
 }
 
 var a = [1,2,3,4]
-print get(a, -1) // expect: 4
+print get(a, 2) // expect: 6
 

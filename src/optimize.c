@@ -403,6 +403,7 @@ bool optimize_block(optimizer *opt, block *blk) {
         }
         
         optimize_dead_store_elimination(opt, blk);
+        block_computeusage(blk, opt->prog->code.data); // Recompute usage
     } while (opt->nchanged>0);
     
     return true;

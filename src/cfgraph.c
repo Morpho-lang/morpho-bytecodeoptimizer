@@ -36,6 +36,10 @@ void block_clear(block *b) {
     dictionary_clear(&b->writes);
 }
 
+/* --------------
+ * Register usage
+ * -------------- */
+
 /** Declare that a block uses a given register as input */
 void block_setuses(block *b, registerindx r) {
     dictionary_insert(&b->uses, MORPHO_INTEGER((int) r), MORPHO_NIL);
@@ -55,6 +59,49 @@ void block_setwrites(block *b, registerindx r) {
 bool block_writes(block *b, registerindx r) {
     return dictionary_get(&b->writes, MORPHO_INTEGER((int) r), NULL);
 }
+
+/* -----------
+ * Block usage
+ * ----------- */
+
+void _wipe(dictionary *dict) { // Wipe a dictionary
+    for (int i=0; i<dict->capacity; i++) dict->contents[i].key=MORPHO_NIL;
+}
+
+void _usagefn(registerindx i, void *ref) { // Set usage
+    block *blk = (block *) ref;
+    if (!block_writes(blk, i)) block_setuses(blk, i);
+}
+
+/** Computes the instruction usage from a block by looping over and analyzing instructions */
+void block_computeusage(block *blk, instruction *ilist) {
+    _wipe(&blk->writes);
+    _wipe(&blk->uses);
+    
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = ilist[i];
+        opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+        
+        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
+        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
+        
+        if (flags & OPCODE_USES_A) _usagefn(DECODE_A(instr), blk);
+        if (flags & OPCODE_USES_B) _usagefn(DECODE_B(instr), blk);
+        if (flags & OPCODE_USES_C) _usagefn(DECODE_C(instr), blk);
+        
+        if (flags & OPCODE_USES_RANGEBC) {
+            for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) _usagefn(i, blk);
+        }
+        
+        // A few opcodes have unusual usage and provide a tracking function
+        opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
+        if (usagefn) usagefn(instr, blk, _usagefn, blk);
+    }
+}
+
+/* ----------------------
+ * Source and dest blocks
+ * ---------------------- */
 
 /** Sets source blocks */
 void block_setsource(block *b, instructionindx indx) {
@@ -347,46 +394,6 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     cfgraphbuilder_addblock(bld, &blk);
 }
 
-void _usagefn(registerindx i, void *ref) {
-    block *blk = (block *) ref;
-    
-    if (!block_writes(blk, i)) block_setuses(blk, i);
-}
-
-/** Determines which registers a block uses and writes to */
-void cfgraphbuilder_blockusage(cfgraphbuilder *bld, block *blk) {
-    for (instructionindx i=blk->start; i<=blk->end; i++) {
-        instruction instr = cfgraphbuilder_fetch(bld, i);
-        opcodeflags flags = opcode_getflags(DECODE_OP(instr));
-        
-        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
-        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
-        
-        if (flags & OPCODE_USES_A &&
-            !block_writes(blk, DECODE_A(instr))) {
-            block_setuses(blk, DECODE_A(instr));
-        }
-        if (flags & OPCODE_USES_B &&
-            !block_writes(blk, DECODE_B(instr))) {
-            block_setuses(blk, DECODE_B(instr));
-        }
-        if (flags & OPCODE_USES_C &&
-            !block_writes(blk, DECODE_C(instr))) {
-            block_setuses(blk, DECODE_C(instr));
-        }
-        
-        if (flags & OPCODE_USES_RANGEBC) {
-            for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) {
-                if (!block_writes(blk, i)) block_setuses(blk, i);
-            }
-        }
-        
-        // A few opcodes have unusual usage and provide a tracking function
-        opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
-        if (usagefn) usagefn(instr, blk, _usagefn, blk);
-    }
-}
-
 /** Finds the destination block dest and add src to its source list */
 void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx src, instructionindx dest) {
     block *blk;
@@ -495,7 +502,7 @@ void cfgraph_build(program *in, cfgraph *out, bool verbose) {
     
     // Identify sources and destinations for each code block
     for (int i=0; i<out->count; i++) {
-        cfgraphbuilder_blockusage(&bld, &out->data[i]);
+        block_computeusage(&out->data[i], bld.in->code.data);
         cfgraphbuilder_blockdest(&bld, &out->data[i]);
     }
     
