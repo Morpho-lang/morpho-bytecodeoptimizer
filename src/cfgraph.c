@@ -19,9 +19,12 @@ typedef unsigned int blockindx;
  * ********************************************************************** */
 
 /** Initializes a basic block structure */
-void block_init(block *b) {
+void block_init(block *b, objectfunction *func) {
     b->start=INSTRUCTIONINDX_EMPTY;
     b->end=INSTRUCTIONINDX_EMPTY;
+    b->func=func;
+    
+    reginfolist_init(&b->rout, func->nregs);
     
     dictionary_init(&b->src);
     dictionary_init(&b->dest);
@@ -31,6 +34,8 @@ void block_init(block *b) {
 
 /** Clears a basic block structure */
 void block_clear(block *b) {
+    reginfolist_clear(&b->rout);
+    
     dictionary_clear(&b->src);
     dictionary_clear(&b->uses);
     dictionary_clear(&b->writes);
@@ -358,9 +363,8 @@ void cfgraphbuilder_branchtable(cfgraphbuilder *bld, indx kindx) {
 /** Creates a new basic block starting at a given instruction */
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
-    block_init(&blk);
+    block_init(&blk, cfgraphbuilder_currentfn(bld));
     blk.start=start;
-    blk.func=cfgraphbuilder_currentfn(bld);
     
     instructionindx i;
     for (i=start; i<cfgraphbuilder_countinstructions(bld); i++) {

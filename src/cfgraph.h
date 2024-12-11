@@ -7,6 +7,8 @@
 #ifndef cfgraph_h
 #define cfgraph_h
 
+#include "reginfo.h"
+
 DECLARE_VARRAY(instructionindx, instructionindx)
 
 /* **********************************************************************
@@ -26,6 +28,8 @@ typedef struct sblock {
     dictionary writes; /** Registers that the block writes to */
     
     objectfunction *func; /** Function that encapsulates the block */
+    
+    reginfolist rout; /** Contents of registers on exit */
 } block;
 
 /* **********************************************************************
@@ -40,7 +44,7 @@ typedef varray_block cfgraph;
  * Interface
  * ********************************************************************** */
 
-void block_init(block *b);
+void block_init(block *b, objectfunction *func);
 void block_clear(block *b);
 
 void block_setuses(block *b, registerindx r);

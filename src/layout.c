@@ -164,7 +164,7 @@ void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func) {
 /** Processes a block by copying instructions from a source block  */
 void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     block out;
-    block_init(&out);
+    block_init(&out, blk->func);
     
     out.start=comp->out.count;
     

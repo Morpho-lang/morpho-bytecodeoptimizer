@@ -26,7 +26,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     
     error_init(&opt->err);
     cfgraph_init(&opt->graph);
-    reginfolist_init(&opt->rlist, 0);
+    reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
     
     opt->v=morpho_newvm();
@@ -43,6 +43,7 @@ void optimizer_init(optimizer *opt, program *prog) {
 void optimize_clear(optimizer *opt) {
     error_clear(&opt->err);
     cfgraph_clear(&opt->graph);
+    reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
     
     if (opt->v) morpho_freevm(opt->v);
@@ -403,8 +404,11 @@ bool optimize_block(optimizer *opt, block *blk) {
         }
         
         optimize_dead_store_elimination(opt, blk);
-        block_computeusage(blk, opt->prog->code.data); // Recompute usage
     } while (opt->nchanged>0);
+    
+    // Finalize block information
+    block_computeusage(blk, opt->prog->code.data); // Recompute usage
+    reginfolist_copy(&opt->rlist, &blk->rout); // Store register contents on output 
     
     return true;
 }
