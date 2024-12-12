@@ -312,7 +312,8 @@ bool strategy_load_index_list(optimizer *opt) {
     
     value type = optimize_type(opt, DECODE_A(instr));
     
-    if (MORPHO_ISSAME(type, typelist)) {
+    if (MORPHO_ISSAME(type, typelist) &&
+        DECODE_B(instr)==DECODE_C(instr)) {
         optimize_replaceinstruction(opt, ENCODE(OP_LIXL, DECODE_B(instr), DECODE_A(instr), DECODE_B(instr)));
         success=true; 
     }

@@ -23,11 +23,11 @@ Propagate constant and type information across blocks. Entry blocks should acqui
     * lixl instruction - efficiently lookup a list element.
         LIXL a, b, c => ra <- b (List)[c]
         => variant 1: Simply redirect to List_getindex:
-                            morpho6 -O morpho6  python3 
-            ListLookup      0.4      1.35     -       
+                            morpho6 -O morpho6  python3
+            ListLookup      0.4      1.35     -
         => variant 2: Assume c is an integer and perform indexing directly:
-                            morpho6 -O morpho6  python3 
-            ListLookup      0.31     1.38     -      
+                            morpho6 -O morpho6  python3
+            ListLookup      0.31     1.38     -
         => Hence most of the cost is in the method lookup
 
     * lixm - lookup a matrix element.
