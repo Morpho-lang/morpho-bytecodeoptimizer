@@ -13,10 +13,6 @@ Some optimizations on these are possible, but require the optimizer to check for
 
 ## Mechanism to insert additional instructions
 
-## Inter-block propagation
-
-Propagate constant and type information across blocks. Entry blocks should acquire functions
-
 ## Additional strategies
 
 * Specialized instructions for common cases:

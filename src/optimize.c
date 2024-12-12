@@ -335,6 +335,7 @@ bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
 /** Optimizations performed at the end of a code block */
 void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     if (opt->verbose) printf("Ending block\n");
+    
     for (int i=0; i<opt->rlist.nreg; i++) {
         instructionindx src;
         
@@ -344,14 +345,15 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
+            instruction instr = optimize_getinstructionat(opt, src);
             
-            if (opt->verbose) {
-                instruction instr = optimize_getinstructionat(opt, src);
+            bool deleted = optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
+            
+            if (deleted && opt->verbose) {
+                printf("Deleted instruction: ");
                 debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
                 printf("\n");
             }
-            
-            optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
         }
     }
 }
@@ -408,9 +410,13 @@ void _determinecontents(int n, block **src, int i, reginfo *out) {
     reginfo info;
     if (n>0) info=src[0]->rout.rinfo[i];
     
-    for (int k=1; k<n; k++) {
+    for (int k=0; k<n; k++) {
         if (!_isequal(&info, &src[k]->rout.rinfo[i])) return;
     }
+    
+    // Don't copy register tracking between blocks.
+    // TODO: this seemed to cause problems. Is there a way to do so safely?
+    if (info.contents==REG_REGISTER) info.contents=REG_VALUE;
     
     if (info.contents!=REG_EMPTY) *out = info;
 }
@@ -452,7 +458,16 @@ void optimize_restorestate(optimizer *opt, block *blk) {
             cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k]);
             if (!srcblk[k]) return;
             
+            if (opt->verbose) {
+                printf("Restoring from block %ti\n", srcblk[k]->start);
+                reginfolist_show(&srcblk[k]->rout);
+            }
+            
             k++;
+        }
+        
+        if (blk->src.count>1) {
+            
         }
         
         _resolve(blk->src.count, srcblk, &opt->rlist);
