@@ -405,7 +405,8 @@ bool _isequal(reginfo *a, reginfo *b) {
 }
 
 void _determinecontents(int n, block **src, int i, reginfo *out) {
-    reginfo info = src[0]->rout.rinfo[i];
+    reginfo info;
+    if (n>0) info=src[0]->rout.rinfo[i];
     
     for (int k=1; k<n; k++) {
         if (!_isequal(&info, &src[k]->rout.rinfo[i])) return;
@@ -415,7 +416,8 @@ void _determinecontents(int n, block **src, int i, reginfo *out) {
 }
 
 value _determinetype(int n, block **src, int i) {
-    value type=src[0]->rout.rinfo[i].type;
+    value type;
+    if (n>0) type=src[0]->rout.rinfo[i].type;
     
     for (int k=1; k<n; k++) {
         if (!MORPHO_ISEQUAL(src[k]->rout.rinfo[i].type, type)) return MORPHO_NIL;
@@ -438,8 +440,9 @@ void optimize_restorestate(optimizer *opt, block *blk) {
     
     optimize_signature(opt); // Restore function parameters
     
-    if (!block_isentry(blk)) {
-        int nentry = blk->src.count;
+    int nentry = blk->src.count;
+    if (!block_isentry(blk) &&
+        nentry>0) {
         block *srcblk[nentry]; // Unpack and find source blocks from the dictionary
         
         for (int i=0, k=0; i<blk->src.capacity; i++) {
@@ -448,9 +451,6 @@ void optimize_restorestate(optimizer *opt, block *blk) {
             
             cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k]);
             if (!srcblk[k]) return;
-            
-            //printf("Restoring from block %ti\n", srcblk[k]->start);
-            //reginfolist_show(&srcblk[k]->rout);
             
             k++;
         }
