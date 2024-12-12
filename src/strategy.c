@@ -196,7 +196,8 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     instructionindx iindx;
     if (!optimize_isempty(opt, r) &&
         optimize_countuses(opt, r)==0 &&
-        optimize_source(opt, r, &iindx)) {
+        optimize_source(opt, r, &iindx) &&
+        block_contains(opt->currentblk, iindx)) {
         
         success=optimize_deleteinstruction(opt, iindx);
     }

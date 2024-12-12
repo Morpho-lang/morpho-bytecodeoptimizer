@@ -342,7 +342,8 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
             reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
-            reginfolist_source(&opt->rlist, i, &src)) { // Identify the instruction that wrote it
+            reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
+            block_contains(blk, src)) { // Ensure instruction is in this block
             
             if (opt->verbose) {
                 instruction instr = optimize_getinstructionat(opt, src);
@@ -368,6 +369,101 @@ void optimize_signature(optimizer *opt) {
     }
 }
 
+void _copy(reginfolist *src, reginfolist *dest) {
+    for (int i=0; i<src->nreg; i++) {
+        if (dest->rinfo[i].contents==REG_EMPTY) { // If empty, just copy across the info from src
+            dest->rinfo[i]=src->rinfo[i];
+        } else {
+            if (src->rinfo[i].contents!=dest->rinfo[i].contents) { // If the content is different set to value
+                dest->rinfo[i].contents=REG_VALUE;
+            } else if ((src->rinfo[i].contents==REG_GLOBAL || // Ensure if the contents have an index that it's the same
+                       src->rinfo[i].contents==REG_CONSTANT ||
+                       src->rinfo[i].contents==REG_UPVALUE ||
+                       src->rinfo[i].contents==REG_REGISTER) &&
+                       src->rinfo[i].indx!=dest->rinfo[i].indx) {
+                dest->rinfo[i].contents=REG_VALUE;
+            }
+            
+            // Ensure types match if present
+            if (!MORPHO_ISEQUAL(src->rinfo[i].type,dest->rinfo[i].type)) dest->rinfo[i].type=MORPHO_NIL;
+        }
+    }
+}
+
+bool _isparam(int n, block **src, int i) {
+    for (int k=0; k<n; k++) if (src[k]->rout.rinfo[i].contents==REG_PARAMETER) return true;
+    return false;
+}
+
+bool _isequal(reginfo *a, reginfo *b) {
+    if (a->contents!=b->contents) return false;
+    if ((a->contents==REG_GLOBAL ||
+         a->contents==REG_UPVALUE ||
+         a->contents==REG_CONSTANT ||
+         a->contents==REG_REGISTER) && a->indx!=b->indx) return false;
+    return true;
+}
+
+void _determinecontents(int n, block **src, int i, reginfo *out) {
+    reginfo info = src[0]->rout.rinfo[i];
+    
+    for (int k=1; k<n; k++) {
+        if (!_isequal(&info, &src[k]->rout.rinfo[i])) return;
+    }
+    
+    if (info.contents!=REG_EMPTY) *out = info;
+}
+
+value _determinetype(int n, block **src, int i) {
+    value type=src[0]->rout.rinfo[i].type;
+    
+    for (int k=1; k<n; k++) {
+        if (!MORPHO_ISEQUAL(src[k]->rout.rinfo[i].type, type)) return MORPHO_NIL;
+    }
+    return type;
+}
+
+void _resolve(int n, block **src, reginfolist *dest) {
+    for (int i=0; i<dest->nreg; i++) {
+        if (_isparam(n, src, i)) continue;
+        _determinecontents(n, src, i, &dest->rinfo[i]);
+        
+        value type=_determinetype(n, src, i);
+        reginfolist_settype(dest, i, type);
+    }
+}
+
+void optimize_restorestate(optimizer *opt, block *blk) {
+    reginfolist_wipe(&opt->rlist, blk->func->nregs);
+    
+    optimize_signature(opt); // Restore function parameters
+    
+    if (!block_isentry(blk)) {
+        int nentry = blk->src.count;
+        block *srcblk[nentry]; // Unpack and find source blocks from the dictionary
+        
+        for (int i=0, k=0; i<blk->src.capacity; i++) {
+            value key = blk->src.contents[i].key;
+            if (MORPHO_ISNIL(key)) continue;
+            
+            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k]);
+            if (!srcblk[k]) return;
+            
+            //printf("Restoring from block %ti\n", srcblk[k]->start);
+            //reginfolist_show(&srcblk[k]->rout);
+            
+            k++;
+        }
+        
+        _resolve(blk->src.count, srcblk, &opt->rlist);
+    }
+    
+    if (opt->verbose) {
+        printf("Restored registers\n");
+        reginfolist_show(&opt->rlist);
+    }
+}
+
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
     opt->currentblk=blk;
@@ -376,10 +472,8 @@ bool optimize_block(optimizer *opt, block *blk) {
         opt->nchanged=0;
         
         if (opt->verbose) printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
-        reginfolist_init(&opt->rlist, blk->func->nregs);
         
-        // Todo: Resolve register state from source blocks
-        if (block_isentry(blk)) optimize_signature(opt);
+        optimize_restorestate(opt, blk);
         
         for (instructionindx i=blk->start; i<=blk->end; i++) {
             instruction instr = optimize_fetch(opt, i);
@@ -408,7 +502,7 @@ bool optimize_block(optimizer *opt, block *blk) {
     
     // Finalize block information
     block_computeusage(blk, opt->prog->code.data); // Recompute usage
-    reginfolist_copy(&opt->rlist, &blk->rout); // Store register contents on output 
+    reginfolist_copy(&opt->rlist, &blk->rout); // Store register contents on output
     
     return true;
 }

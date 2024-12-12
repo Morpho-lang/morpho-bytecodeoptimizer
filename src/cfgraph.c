@@ -65,6 +65,10 @@ bool block_writes(block *b, registerindx r) {
     return dictionary_get(&b->writes, MORPHO_INTEGER((int) r), NULL);
 }
 
+bool block_contains(block *b, instructionindx indx) {
+    return (indx>=b->start && indx<=b->end);
+}
+
 /* -----------
  * Block usage
  * ----------- */

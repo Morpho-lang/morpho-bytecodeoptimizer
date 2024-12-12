@@ -51,6 +51,8 @@ void block_setuses(block *b, registerindx r);
 void block_setwrites(block *b, registerindx r);
 bool block_uses(block *b, registerindx r);
 bool block_writes(block *b, registerindx r);
+bool block_contains(block *b, instructionindx indx);
+
 void block_computeusage(block *blk, instruction *ilist);
 
 void block_setsource(block *b, instructionindx indx);

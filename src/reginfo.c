@@ -30,11 +30,17 @@ void reginfolist_clear(reginfolist *rlist) {
     if (rlist->rinfo) MORPHO_FREE(rlist->rinfo);
 }
 
+/** Wipes a reginfo list */
+void reginfolist_wipe(reginfolist *rlist, int nreg) {
+    rlist->nreg=nreg;
+    for (int i=0; i<nreg; i++) reginfo_init(&rlist->rinfo[i]);
+}
+
 /** Copys a reginfo list */
 bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
     if (src->nreg>dest->nreg) return false;
     for (int i=0; i<src->nreg; i++) dest->rinfo[i]=src->rinfo[i];
-    return true; 
+    return true;
 }
 
 /** Writes a value to a register */
