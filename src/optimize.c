@@ -551,45 +551,34 @@ bool optimize(program *in) {
  * Initialization/Finalization
  * ********************************************************************** */
 
-value Bool_prnt(vm *v, int nargs, value *args) {
-    object_print(v, MORPHO_GETARG(args, 0));
-    return MORPHO_SELF(args); 
-}
-
-MORPHO_BEGINCLASS(Bool)
-MORPHO_METHOD(MORPHO_PRINT_METHOD, Bool_prnt, MORPHO_FN_FLAGSEMPTY)
-MORPHO_ENDCLASS
-
 value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
     opcode_initialize();
-    
-    //objectstring boollabel = MORPHO_STATICSTRING("Bool");
-    //typebool = builtin_findclass(MORPHO_OBJECT(&boollabel));
-    typebool = builtin_addclass("Bool", MORPHO_GETCLASSDEFINITION(Bool), MORPHO_NIL);
-    value_setveneerclass(MORPHO_TRUE, typebool);
 
-    objectstring intlabel = MORPHO_STATICSTRING("Int");
+    objectstring boollabel = MORPHO_STATICSTRING(BOOL_CLASSNAME);
+    typebool = builtin_findclass(MORPHO_OBJECT(&boollabel));
+    
+    objectstring intlabel = MORPHO_STATICSTRING(INT_CLASSNAME);
     typeint = builtin_findclass(MORPHO_OBJECT(&intlabel));
     
-    objectstring floatlabel = MORPHO_STATICSTRING("Float");
+    objectstring floatlabel = MORPHO_STATICSTRING(FLOAT_CLASSNAME);
     typefloat = builtin_findclass(MORPHO_OBJECT(&floatlabel));
     
-    objectstring stringlabel = MORPHO_STATICSTRING("String");
+    objectstring stringlabel = MORPHO_STATICSTRING(STRING_CLASSNAME);
     typestring = builtin_findclass(MORPHO_OBJECT(&stringlabel));
     
-    objectstring closurelabel = MORPHO_STATICSTRING("Closure");
+    objectstring closurelabel = MORPHO_STATICSTRING(CLOSURE_CLASSNAME);
     typeclosure = builtin_findclass(MORPHO_OBJECT(&closurelabel));
     
-    objectstring rangelabel = MORPHO_STATICSTRING("Range");
+    objectstring rangelabel = MORPHO_STATICSTRING(RANGE_CLASSNAME);
     typerange = builtin_findclass(MORPHO_OBJECT(&rangelabel));
     
-    objectstring listlabel = MORPHO_STATICSTRING("List");
+    objectstring listlabel = MORPHO_STATICSTRING(LIST_CLASSNAME);
     typelist = builtin_findclass(MORPHO_OBJECT(&listlabel));
     
-    objectstring tuplelabel = MORPHO_STATICSTRING("Tuple");
+    objectstring tuplelabel = MORPHO_STATICSTRING(TUPLE_CLASSNAME);
     typetuple = builtin_findclass(MORPHO_OBJECT(&tuplelabel));
 }
 
