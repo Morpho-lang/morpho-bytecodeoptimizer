@@ -414,9 +414,9 @@ void _determinecontents(int n, block **src, int i, reginfo *out) {
         if (!_isequal(&info, &src[k]->rout.rinfo[i])) return;
     }
     
-    // Don't copy register tracking between blocks.
+    // Don't copy register tracking between blocks if there's more than one source
     // TODO: this seemed to cause problems. Is there a way to do so safely?
-    if (info.contents==REG_REGISTER) info.contents=REG_VALUE;
+    if (n>1 && info.contents==REG_REGISTER) info.contents=REG_VALUE;
     
     if (info.contents!=REG_EMPTY) *out = info;
 }
