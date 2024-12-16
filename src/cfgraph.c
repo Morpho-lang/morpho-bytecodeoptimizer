@@ -91,9 +91,7 @@ void block_computeusage(block *blk, instruction *ilist) {
         instruction instr = ilist[i];
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
-        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
-        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
-        
+        // Process usage 
         if (flags & OPCODE_USES_A) _usagefn(DECODE_A(instr), blk);
         if (flags & OPCODE_USES_B) _usagefn(DECODE_B(instr), blk);
         if (flags & OPCODE_USES_C) _usagefn(DECODE_C(instr), blk);
@@ -105,6 +103,11 @@ void block_computeusage(block *blk, instruction *ilist) {
         // A few opcodes have unusual usage and provide a tracking function
         opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
         if (usagefn) usagefn(instr, blk, _usagefn, blk);
+        
+        // Now process writes
+        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
+        if (flags & OPCODE_OVERWRITES_AP1) block_setwrites(blk, DECODE_A(instr)+1);
+        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
     }
 }
 

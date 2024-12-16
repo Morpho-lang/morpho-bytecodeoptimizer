@@ -14,18 +14,19 @@ typedef unsigned int opcodeflags;
 
 #define OPCODE_BLANK            0
 #define OPCODE_OVERWRITES_A     (1<<0)
-#define OPCODE_OVERWRITES_B     (1<<1)
-#define OPCODE_USES_A           (1<<2)
-#define OPCODE_USES_B           (1<<3)
-#define OPCODE_USES_C           (1<<4)
-#define OPCODE_USES_RANGEBC     (1<<5)
-#define OPCODE_ENDSBLOCK        (1<<6)
-#define OPCODE_BRANCH           (1<<7)
-#define OPCODE_NEWBLOCKAFTER      (1<<8)
-#define OPCODE_BRANCH_TABLE     (1<<9)
-#define OPCODE_TERMINATING      (1<<10)
-#define OPCODE_SIDEEFFECTS      (1<<11)
-#define OPCODE_UNSUPPORTED      (1<<12)
+#define OPCODE_OVERWRITES_AP1   (1<<1)
+#define OPCODE_OVERWRITES_B     (1<<2)
+#define OPCODE_USES_A           (1<<3)
+#define OPCODE_USES_B           (1<<4)
+#define OPCODE_USES_C           (1<<5)
+#define OPCODE_USES_RANGEBC     (1<<6)
+#define OPCODE_ENDSBLOCK        (1<<7)
+#define OPCODE_BRANCH           (1<<8)
+#define OPCODE_NEWBLOCKAFTER    (1<<9)
+#define OPCODE_BRANCH_TABLE     (1<<10)
+#define OPCODE_TERMINATING      (1<<11)
+#define OPCODE_SIDEEFFECTS      (1<<12)
+#define OPCODE_UNSUPPORTED      (1<<13)
 
 /* **********************************************************************
  * Interface

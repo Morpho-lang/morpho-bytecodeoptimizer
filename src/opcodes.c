@@ -29,21 +29,21 @@ typedef struct {
 
 void call_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx rA = DECODE_A(instr);
-    int nargs = DECODE_B(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
     
-    for (registerindx i=rA+1; i<=rA+nargs; i++) fn(i, ref);
+    for (registerindx i=0; i<nargs+2*nopt+1; i++) fn(rA+i, ref);
+}
+
+void invoke_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
+    registerindx rA = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    
+    for (registerindx i=0; i<nargs+2*nopt+2; i++) fn(rA+i, ref);
 }
 
 void return_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
     registerindx rA = DECODE_A(instr);
     if (rA>0) fn(DECODE_B(instr), ref);
-}
-
-void invoke_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
-    registerindx rA = DECODE_A(instr);
-    int nargs = DECODE_C(instr);
-    
-    for (registerindx i=rA+1; i<=rA+nargs; i++) fn(i, ref);
 }
 
 void closure_usagefn(instruction instr, block *blk, usagecallbackfn fn, void *ref) {
@@ -142,7 +142,8 @@ void cmp_trackingfn(optimizer *opt) {
 
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    registerindx a = DECODE_A(instr);
+    registerindx a = DECODE_A(instr), rout = a;
+    if (DECODE_OP(instr)==OP_INVOKE) rout+=1;
     
     value type=MORPHO_NIL;
     indx kindx;
@@ -157,8 +158,8 @@ void call_trackingfn(optimizer *opt) {
         }
     }
     
-    optimize_writevalue(opt, a);
-    if (!MORPHO_ISNIL(type)) optimize_settype(opt, a, type);
+    optimize_writevalue(opt, rout);
+    if (!MORPHO_ISNIL(type)) optimize_settype(opt, rout, type);
 }
 
 void lup_trackingfn(optimizer *opt) {
@@ -238,8 +239,8 @@ opcodeinfo opcodetable[] = {
     { OP_BIF,  "bif",  OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_NEWBLOCKAFTER | OPCODE_USES_A, NULL, NULL, NULL },
     { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_NEWBLOCKAFTER | OPCODE_USES_A, NULL, NULL, NULL },
     
-    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn, NULL },
-    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_USES_B | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn, NULL },
+    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_OVERWRITES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn, NULL },
+    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn, NULL },
     { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn, NULL },
     
     { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL, NULL },

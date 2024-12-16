@@ -104,7 +104,7 @@ bool strategy_constant_folding(optimizer *opt) {
         return false;
     }
     
-    // Replace CALL with an appropriate LCT
+    // Replace result with an appropriate LCT
     if (!optimize_replacewithloadconstant(opt, DECODE_A(instr), new)) {
         morpho_freeobject(new);
         return false;
@@ -222,10 +222,11 @@ bool strategy_constant_immutable(optimizer *opt) {
     
     registerindx rA=DECODE_A(instr);
     int nargs = DECODE_B(instr);
+    int nopt = DECODE_C(instr);
     
     // Ensure call target and arguments are all constants
     indx cindx[nargs+1];
-    for (int i=0; i<=nargs; i++) {
+    for (int i=0; i<=nargs+nopt; i++) {
         CHECK(optimize_isconstant(opt, rA + i, cindx + i));
     }
     
@@ -244,11 +245,11 @@ bool strategy_constant_immutable(optimizer *opt) {
     varray_instruction prog;
     varray_instructioninit(&prog);
     
-    for (int i=0; i<nargs+1; i++) { // Setup load constants incl. the function
+    for (int i=0; i<nargs+nopt+1; i++) { // Setup load constants incl. the function
         varray_instructionwrite(&prog, ENCODE_LONG(OP_LCT, i, (instruction) cindx[i]));
     }
     
-    varray_instructionwrite(&prog, ENCODE_DOUBLE(OP_CALL, 0, (instruction) nargs));
+    varray_instructionwrite(&prog, ENCODE(OP_CALL, 0, (instruction) nargs, (instruction) nopt));
     varray_instructionwrite(&prog, ENCODE_BYTE(OP_END));
     
     // Evaluate the program
