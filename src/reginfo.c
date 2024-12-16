@@ -117,6 +117,7 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
     indx srcindx; // Indx of the source
     
     reginfolist_contents(rlist, rindx, &srccontents, &srcindx);
+    value srctype = reginfolist_type(rlist, rindx);
     
     for (registerindx i=0; i<rlist->nreg; i++) { // Look for registers
         if (i==rindx) continue; // Skip over the tautological case
@@ -132,6 +133,7 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
             reginfolist_source(rlist, i, &src); // The write instruction should remain the duplicating instruction
             
             reginfolist_write(rlist, src, i, srccontents, srcindx);
+            if (!MORPHO_ISNIL(srctype)) reginfolist_settype(rlist, i, srctype);
             
             // Usage count should be copied from src register
             int nused = reginfolist_countuses(rlist, rindx);
