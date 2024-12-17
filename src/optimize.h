@@ -90,6 +90,7 @@ block *optimize_currentblock(optimizer *opt);
 void optimize_replaceinstruction(optimizer *opt, instruction instr);
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr);
 bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst);
+void optimize_insertinstructions(optimizer *opt, int n, instruction *instr);
 
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 

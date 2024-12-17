@@ -268,7 +268,7 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     if (opt->verbose) optimize_disassemble(opt);
 }
 
-/** Callback function to get the current instruction */
+/** Replaces an instruction at a given index */
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
     instruction oinstr = opt->prog->code.data[i];
     
@@ -277,6 +277,12 @@ void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instructio
     
     opt->prog->code.data[i]=instr;
     opt->nchanged++;
+}
+
+/** Inserts a sequence of instructions at a given index, replacing the current instruction there */
+void optimize_insertinstructions(optimizer *opt, int n, instruction *instr) {
+    
+    //opt->nchanged++;
 }
 
 /** Replaces the current instruction with LCT r, and a given constant */

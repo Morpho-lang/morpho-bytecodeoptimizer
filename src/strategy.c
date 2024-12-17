@@ -341,16 +341,21 @@ bool strategy_method_resolution(optimizer *opt) {
         if (klass->children.count>0) return false;
         
         value method;
+        indx newkindx;
         instructionindx srcindx;
         if (morpho_lookupmethod(type, label, &method) &&
             optimize_source(opt, DECODE_A(instr), &srcindx) &&
             block_contains(optimize_currentblock(opt), srcindx) &&
-            !optimize_isused(opt, DECODE_A(instr)) &&
-            optimize_addconstant(opt, method, &kindx)) {
-            // Replace the constant with the method
-            optimize_replaceinstructionat(opt, srcindx, ENCODE_LONG(OP_LCT, DECODE_A(instr), (instruction) kindx));
+            optimize_addconstant(opt, method, &newkindx)) {
             
-            optimize_replaceinstruction(opt, ENCODE(OP_METHOD, DECODE_A(instr), DECODE_B(instr), DECODE_C(instr)));
+            // Replace invoke with an equivalent sequence of instructions
+            instruction insert[] = {
+                ENCODE_LONG(OP_LCT, DECODE_A(instr), (instruction) newkindx),
+                ENCODE(OP_METHOD, DECODE_A(instr), DECODE_B(instr), DECODE_C(instr)),
+                ENCODE_LONG(OP_LCT, DECODE_A(instr), (instruction) kindx),
+            };
+            optimize_insertinstructions(opt, 3, insert);
+            
             success=true;
         }
     }
