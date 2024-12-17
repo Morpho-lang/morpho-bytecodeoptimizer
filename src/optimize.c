@@ -146,6 +146,18 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
 }
 
 /** Checks if a register holds another register */
+bool optimize_isglobal(optimizer *opt, registerindx i, indx *out) {
+    regcontents contents=REG_EMPTY;
+    indx ix;
+    if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
+    
+    bool success=(contents==REG_GLOBAL);
+    if (success && out) *out = ix;
+    
+    return success;
+}
+
+/** Checks if a register holds another register */
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *out) {
     regcontents contents=REG_EMPTY;
     indx ix;
@@ -166,12 +178,41 @@ bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, in
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {
         instruction instr = optimize_getinstructionat(opt, i);
-        opcodeflags flags=opcode_getflags(instr);
-        if ( ((flags & OPCODE_OVERWRITES_A) && (DECODE_A(instr)==rindx)) ||
-            ((flags & OPCODE_OVERWRITES_B) && (DECODE_B(instr)==rindx)) ) return true;
+        registerindx overwrites;
+        if (opcode_overwritesforinstruction(instr, &overwrites) &&
+            overwrites==rindx) {
+            return true;
+        }
     }
     
     return false;
+}
+
+typedef struct {
+    registerindx r;
+    bool isused;
+} _usedstruct;
+
+static void _usagefn(registerindx i, void *ref) { // Set usage
+    _usedstruct *s = (_usedstruct *) ref;
+    if (i==s->r) s->isused=true;
+}
+
+/** Checks if a register is used between the instruction after the current one and the end of the block OR an instruction that overwrites it */
+bool optimize_isused(optimizer *opt, registerindx rindx) {
+    for (instructionindx i=opt->pc+1; i<=opt->currentblk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        
+        _usedstruct s = { .r = rindx, .isused = false };
+        opcode_usageforinstruction(opt->currentblk, instr, _usagefn, &s);
+        if (s.isused) return true;
+        
+        registerindx overwrites;
+        if (opcode_overwritesforinstruction(instr, &overwrites) &&
+            overwrites==rindx) return false;
+    }
+    
+    return optimize_checkdestusage(opt, opt->currentblk, rindx);
 }
 
 /** Trace back through duplicate registers */

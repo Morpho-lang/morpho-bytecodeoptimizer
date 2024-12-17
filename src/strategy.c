@@ -188,9 +188,8 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
     // Return quickly if this instruction doesn't overrwrite
-    CHECK(flags & (OPCODE_OVERWRITES_A | OPCODE_OVERWRITES_B));
-    
-    registerindx r = (flags & OPCODE_OVERWRITES_A ? DECODE_A(instr) : DECODE_Bx(instr));
+    registerindx r;
+    if (!opcode_overwritesforinstruction(instr, &r)) return false;
     bool success=false;
     
     instructionindx iindx;
@@ -322,6 +321,43 @@ bool strategy_load_index_list(optimizer *opt) {
     return success;
 }
 
+/* -------------------------------------
+ * Method resolution
+ * ------------------------------------- */
+
+bool strategy_method_resolution(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    bool success=false;
+    
+    value type = optimize_type(opt, DECODE_A(instr)+1);
+    indx kindx;
+    
+    if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
+        optimize_isconstant(opt, DECODE_A(instr), &kindx)) {
+        objectclass *klass = MORPHO_GETCLASS(type);
+        value label = optimize_getconstant(opt, kindx);
+        
+        // Todo: Should check to see if this method is replaced in any of the subclasses.
+        if (klass->children.count>0) return false;
+        
+        value method;
+        instructionindx srcindx;
+        if (morpho_lookupmethod(type, label, &method) &&
+            optimize_source(opt, DECODE_A(instr), &srcindx) &&
+            block_contains(optimize_currentblock(opt), srcindx) &&
+            !optimize_isused(opt, DECODE_A(instr)) &&
+            optimize_addconstant(opt, method, &kindx)) {
+            // Replace the constant with the method
+            optimize_replaceinstructionat(opt, srcindx, ENCODE_LONG(OP_LCT, DECODE_A(instr), (instruction) kindx));
+            
+            optimize_replaceinstruction(opt, ENCODE(OP_METHOD, DECODE_A(instr), DECODE_B(instr), DECODE_C(instr)));
+            success=true;
+        }
+    }
+    
+    return success;
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
@@ -336,6 +372,7 @@ optimizationstrategy strategies[] = {
     { OP_LUP,  strategy_duplicate_load,                   0 },
     { OP_LIX,  strategy_load_index_list,                  0 },
     { OP_CALL, strategy_constant_immutable,               0 },
+    { OP_INVOKE, strategy_method_resolution,              0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },

@@ -77,7 +77,7 @@ void _wipe(dictionary *dict) { // Wipe a dictionary
     for (int i=0; i<dict->capacity; i++) dict->contents[i].key=MORPHO_NIL;
 }
 
-void _usagefn(registerindx i, void *ref) { // Set usage
+static void _usagefn(registerindx i, void *ref) { // Set usage
     block *blk = (block *) ref;
     if (!block_writes(blk, i)) block_setuses(blk, i);
 }
@@ -91,23 +91,12 @@ void block_computeusage(block *blk, instruction *ilist) {
         instruction instr = ilist[i];
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
-        // Process usage 
-        if (flags & OPCODE_USES_A) _usagefn(DECODE_A(instr), blk);
-        if (flags & OPCODE_USES_B) _usagefn(DECODE_B(instr), blk);
-        if (flags & OPCODE_USES_C) _usagefn(DECODE_C(instr), blk);
+        opcode_usageforinstruction(blk, instr, _usagefn, blk);
         
-        if (flags & OPCODE_USES_RANGEBC) {
-            for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) _usagefn(i, blk);
+        registerindx roverwrite;
+        if (opcode_overwritesforinstruction(instr, &roverwrite)) {
+            block_setwrites(blk, roverwrite);
         }
-        
-        // A few opcodes have unusual usage and provide a tracking function
-        opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
-        if (usagefn) usagefn(instr, blk, _usagefn, blk);
-        
-        // Now process writes
-        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
-        if (flags & OPCODE_OVERWRITES_AP1) block_setwrites(blk, DECODE_A(instr)+1);
-        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
     }
 }
 

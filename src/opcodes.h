@@ -37,6 +37,9 @@ opcodetrackingfn opcode_gettrackingfn(instruction opcode);
 opcodeusagefn opcode_getusagefn(instruction opcode);
 opcodetrackingfn opcode_getreplacefn(instruction opcode);
 
+void opcode_usageforinstruction(block *blk, instruction instr, usagecallbackfn usagefn, void *ref);
+bool opcode_overwritesforinstruction(instruction instr, registerindx *out);
+
 void opcode_initialize(void);
 
 #endif

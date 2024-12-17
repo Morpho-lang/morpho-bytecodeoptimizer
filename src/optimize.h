@@ -70,6 +70,7 @@ bool optimize_addconstant(optimizer *opt, value val, indx *indx);
 
 bool optimize_isempty(optimizer *opt, registerindx i);
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
+bool optimize_isglobal(optimizer *opt, registerindx i, indx *indx);
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *indx);
 bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, indx *indx);
 
@@ -95,5 +96,8 @@ bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 globalinfolist *optimize_globalinfolist(optimizer *opt);
 
 void optimize_disassemble(optimizer *opt);
+
+bool optimize_isused(optimizer *opt, registerindx rindx);
+bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 
 #endif
