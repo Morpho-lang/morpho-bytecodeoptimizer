@@ -199,7 +199,7 @@ void layout_deleteunused(optimizer *opt) {
     block *blk = &opt->graph.data[blkindx];
     
     // Loop over instructions
-    for (indx i=0; i<code->count; i++) {
+    for (indx i=0; i<code->count && blkindx<opt->graph.count; i++) {
         if (i>blk->end) { // Check whether we need to move to the next block
             blkindx++;
             blk = &opt->graph.data[blkindx];
@@ -354,6 +354,6 @@ void layout_consolidate(optimizer *opt) {
 void layout(optimizer *opt) {
     layout_sortcfgraph(opt);
     layout_deleteunused(opt);
-    layout_fixannotations(opt);
+    //layout_fixannotations(opt);
     layout_consolidate(opt);
 }

@@ -28,6 +28,8 @@ typedef unsigned int opcodeflags;
 #define OPCODE_SIDEEFFECTS      (1<<12)
 #define OPCODE_UNSUPPORTED      (1<<13)
 
+#define OP_INSERT           (OP_END+1)
+
 /* **********************************************************************
  * Interface
  * ********************************************************************** */

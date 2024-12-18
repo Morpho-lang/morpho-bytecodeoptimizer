@@ -12,7 +12,7 @@
 #include "info.h"
 #include "cfgraph.h"
 
-//#define OPTIMIZER_VERBOSE
+#define OPTIMIZER_VERBOSE
 
 /* **********************************************************************
  * Optimizer data structure
@@ -34,6 +34,8 @@ typedef struct {
     instructionindx pc;
     instruction current;
     int nchanged; /** Number of instructions changed in this pass */
+    
+    varray_instruction insertions;
     
     vm *v; /** VM to execute subprograms */
     program *temp; /** Temporary program structure */

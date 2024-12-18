@@ -28,6 +28,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
+    varray_instructioninit(&opt->insertions);
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
@@ -45,6 +46,7 @@ void optimize_clear(optimizer *opt) {
     cfgraph_clear(&opt->graph);
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
+    varray_instructionclear(&opt->insertions);
     
     if (opt->v) morpho_freevm(opt->v);
     if (opt->temp) morpho_freeprogram(opt->temp);
@@ -281,8 +283,12 @@ void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instructio
 
 /** Inserts a sequence of instructions at a given index, replacing the current instruction there */
 void optimize_insertinstructions(optimizer *opt, int n, instruction *instr) {
+    instructionindx start = opt->insertions.count;
+    varray_instructionadd(&opt->insertions, instr, n);
+    varray_instructionwrite(&opt->insertions, ENCODE_BYTE(OP_END));
     
-    //opt->nchanged++;
+    optimize_replaceinstruction(opt, ENCODE_LONG(OP_INSERT, n, start));
+    opt->nchanged++;
 }
 
 /** Replaces the current instruction with LCT r, and a given constant */
@@ -307,6 +313,8 @@ bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value kons
     Returns true if the instruction was deleted */
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     instruction instr = optimize_getinstructionat(opt, indx);
+    if (DECODE_OP(instr)==OP_INSERT) return false; // Instruction to be deleted was an insertion point
+    
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
     // Check for side effects
@@ -327,20 +335,59 @@ void _optusagefn(registerindx r, void *ref) {
     reginfolist_uses(rinfo, r);
 }
 
+/** Updates reginfo usage information for an insertion */
+void optimize_usageforinsertion(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    int n=DECODE_A(instr);
+    instructionindx start=DECODE_Bx(instr);
+    
+    for (int i=0; i<n; i++) {
+        instr = opt->insertions.data[start+i];
+        opcode_usageforinstruction(opt->currentblk, instr, _optusagefn, &opt->rlist);
+    }
+}
+
 /** Updates reginfo usage information based on the opcode */
 void optimize_usage(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    if (DECODE_OP(instr)!=OP_INSERT) {
+        opcode_usageforinstruction(opt->currentblk, instr, _optusagefn, &opt->rlist);
+    } else optimize_usageforinsertion(opt);
+}
+
+/** Updates reginfo tracking information for an insertion */
+void optimize_trackforinsertion(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    int n=DECODE_A(instr);
+    instructionindx start=DECODE_Bx(instr);
     
-    if (flags & OPCODE_USES_A) reginfolist_uses(&opt->rlist, DECODE_A(instr));
-    if (flags & OPCODE_USES_B) reginfolist_uses(&opt->rlist, DECODE_B(instr));
-    if (flags & OPCODE_USES_C) reginfolist_uses(&opt->rlist, DECODE_C(instr));
-    if (flags & OPCODE_USES_RANGEBC) {
-        for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) reginfolist_uses(&opt->rlist, i);
+    for (int i=0; i<n; i++) {
+        instruction iinstr = opt->insertions.data[start+i];
+        opt->current=iinstr; // Patch in the inserted instruction so that the tracking fn gets it
+        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(iinstr));
+        if (trackingfn) trackingfn(opt);
     }
     
-    opcodeusagefn usagefn = opcode_getusagefn(DECODE_OP(instr));
-    if (usagefn) usagefn(instr, opt->currentblk, _optusagefn, &opt->rlist);
+    opt->current=instr; // Restore current instruction
+}
+
+/** Tracks register content for the current instruction */
+void optimize_track(optimizer *opt) {
+    instruction op=DECODE_OP(opt->current);
+    if (op!=OP_INSERT) {
+        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
+        if (trackingfn) trackingfn(opt);
+    } else {
+        optimize_trackforinsertion(opt);
+    }
+}
+
+/** Checks if a block contains any insertions*/
+bool optimize_hasinsertions(optimizer *opt, block *blk) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        if (DECODE_OP(optimize_getinstructionat(opt, i))==OP_INSERT) return true;
+    }
+    return false;
 }
 
 /** Disassembles the current instruction */
@@ -405,6 +452,55 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     }
 }
 
+int optimize_countinsertions(optimizer *opt, block *blk) {
+    int n=0;
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        if (DECODE_OP(instr)==OP_INSERT) n+=DECODE_A(instr);
+    }
+    return n;
+}
+
+/** Rebuilds a block inserting inserted code */
+bool optimize_processinsertions(optimizer *opt, block *blk) {
+    varray_instruction *code = &opt->prog->code;
+    
+    int ninsert = optimize_countinsertions(opt, blk);
+    
+    if (!varray_instructionresize(code, ninsert)) return false;
+    
+    // Move instructions after the block end
+    instructionindx nmove = code->count - (blk->end+1);
+    if (nmove) memmove(&code->data[blk->end+1+ninsert], &code->data[blk->end+1], sizeof(instruction)*nmove);
+    
+    instructionindx k=blk->end+ninsert; // Destination index
+    // Loop backwards over block copying in insertions
+    for (instructionindx i=blk->end; i>=blk->start; i--) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        if (DECODE_OP(instr)==OP_INSERT) {
+            int n=DECODE_A(instr);
+            k-=n;
+            memcpy(code->data+k+1, opt->insertions.data+DECODE_Bx(instr), n*sizeof(instruction));
+        } else {
+            code->data[k]=code->data[i];
+            k--;
+        }
+    }
+    
+    code->count+=ninsert;
+    blk->end+=ninsert;
+    opt->insertions.count=0; // Clear insertions
+    
+    if (opt->verbose) {
+        printf("Expanded block [%ti - %ti]\n", blk->start, blk->end);
+        for (instructionindx i=blk->start; i<=blk->end; i++) {
+            instruction instr = optimize_getinstructionat(opt, i);
+            debugger_disassembleinstruction(NULL, instr, i, NULL, NULL);
+            printf("\n");
+        }
+    }
+}
+
 /** Sets the contents of registers from knowledge of the function signature */
 void optimize_signature(optimizer *opt) {
     objectfunction *func = optimize_currentblock(opt)->func;
@@ -418,6 +514,7 @@ void optimize_signature(optimizer *opt) {
     }
 }
 
+/* Todo: Remove dead function v */
 void _copy(reginfolist *src, reginfolist *dest) {
     for (int i=0; i<src->nreg; i++) {
         if (dest->rinfo[i].contents==REG_EMPTY) { // If empty, just copy across the info from src
@@ -553,13 +650,14 @@ bool optimize_block(optimizer *opt, block *blk) {
             if (optimize_checkerror(opt)) return false;
             
             // Perform tracking to track register contents from the optimized instruction
-            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
-            if (trackingfn) trackingfn(opt);
+            optimize_track(opt);
             
             if (opt->verbose) reginfolist_show(&opt->rlist);
         }
         
-        optimize_dead_store_elimination(opt, blk);
+        if (optimize_hasinsertions(opt, blk)) {
+            optimize_processinsertions(opt, blk);
+        } else optimize_dead_store_elimination(opt, blk);
     } while (opt->nchanged>0);
     
     // Finalize block information
