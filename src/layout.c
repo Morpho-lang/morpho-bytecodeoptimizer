@@ -354,6 +354,6 @@ void layout_consolidate(optimizer *opt) {
 void layout(optimizer *opt) {
     layout_sortcfgraph(opt);
     layout_deleteunused(opt);
-    //layout_fixannotations(opt);
+    layout_fixannotations(opt);
     layout_consolidate(opt);
 }

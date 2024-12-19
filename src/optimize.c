@@ -461,6 +461,21 @@ int optimize_countinsertions(optimizer *opt, block *blk) {
     return n;
 }
 
+void _fixannotation(optimizer *opt, instructionindx iindx, int ninsert) {
+    varray_debugannotation *alist = &opt->prog->annotations;
+    instructionindx i=0;
+    
+    for (unsigned int j=0; j<alist->count; j++) {
+        debugannotation *ann = &alist->data[j];
+        if (ann->type!=DEBUG_ELEMENT) continue;
+            
+        if (iindx>=i && iindx<i+ann->content.element.ninstr) {
+            ann->content.element.ninstr+=ninsert;
+            return;
+        } else i+=ann->content.element.ninstr;
+    }
+}
+
 /** Rebuilds a block inserting inserted code */
 bool optimize_processinsertions(optimizer *opt, block *blk) {
     varray_instruction *code = &opt->prog->code;
@@ -481,6 +496,7 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
             int n=DECODE_A(instr);
             k-=n;
             memcpy(code->data+k+1, opt->insertions.data+DECODE_Bx(instr), n*sizeof(instruction));
+            _fixannotation(opt, i, n);
         } else {
             code->data[k]=code->data[i];
             k--;
@@ -490,6 +506,12 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
     code->count+=ninsert;
     blk->end+=ninsert;
     opt->insertions.count=0; // Clear insertions
+    
+    // Fix starting indices for subsequent blocks
+    for (int i=0; i<opt->graph.count; i++) {
+        block *b = &opt->graph.data[i];
+        if (b->start>blk->start) b->start+=ninsert;
+    }
     
     if (opt->verbose) {
         printf("Expanded block [%ti - %ti]\n", blk->start, blk->end);
