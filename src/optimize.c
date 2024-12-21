@@ -406,7 +406,7 @@ bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary 
         
         if (MORPHO_ISINTEGER(key) &&
             !dictionary_get(checked, key, NULL) && // Ensure the block hasn't been checked
-            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
+            cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
             if (block_uses(dest, rindx)) return true;
             
             if (!block_writes(dest, rindx) &&
@@ -623,8 +623,7 @@ void optimize_restorestate(optimizer *opt, block *blk) {
             value key = blk->src.contents[i].key;
             if (MORPHO_ISNIL(key)) continue;
             
-            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k]);
-            if (!srcblk[k]) return;
+            if (!cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k])) return;
             
             if (opt->verbose) {
                 printf("Restoring from block %ti\n", srcblk[k]->start);

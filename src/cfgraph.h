@@ -39,6 +39,7 @@ typedef struct sblock {
 DECLARE_VARRAY(block, block);
 
 typedef varray_block cfgraph; 
+typedef indx blockindx;
 
 /* **********************************************************************
  * Interface
@@ -55,8 +56,8 @@ bool block_contains(block *b, instructionindx indx);
 
 void block_computeusage(block *blk, instruction *ilist);
 
-void block_setsource(block *b, instructionindx indx);
-void block_setdest(block *b, instructionindx indx);
+void block_setsource(block *b, blockindx indx);
+void block_setdest(block *b, blockindx indx);
 
 bool block_isentry(block *b);
 
@@ -67,7 +68,9 @@ void cfgraph_clear(cfgraph *graph);
 void cfgraph_show(cfgraph *graph);
 
 void cfgraph_sort(cfgraph *graph);
-bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out);
+bool cfgraph_findblock(cfgraph *graph, instructionindx start, block **out);
+bool cfgraph_findblockindx(cfgraph *graph, instructionindx start, blockindx *out);
+bool cfgraph_indx(cfgraph *graph, blockindx bindx, block **out);
 
 void cfgraph_build(program *in, cfgraph *out, bool verbose);
 

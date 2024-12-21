@@ -76,7 +76,7 @@ void blockcomposer_addbranchtable(blockcomposer *comp, value table) {
 
 /** Find a block in the source graph */
 bool blockcomposer_findsrc(blockcomposer *comp, instructionindx start, block **out) {
-    return cfgraph_findsrtd(comp->graph, start, out);
+    return cfgraph_findblock(comp->graph, start, out);
 }
 
 /** Maps a block id to the new block id */
