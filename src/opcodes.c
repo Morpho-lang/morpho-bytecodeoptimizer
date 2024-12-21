@@ -82,12 +82,8 @@ void lgl_trackingfn(optimizer *opt) {
     registerindx rindx = DECODE_A(instr);
     optimize_write(opt, rindx, REG_GLOBAL, DECODE_Bx(instr));
     
-    globalinfolist *glist = optimize_globalinfolist(opt);
-    int gindx = DECODE_Bx(instr);
-    globalinfolist_read(glist, gindx, optimize_getinstructionindx(opt));
-    
     value type = MORPHO_NIL;
-    if (opt->pass>0) type=globalinfolist_type(glist, gindx); // We can only do this once the entire code has been seen at least once 
+    type=globalinfolist_type(optimize_globalinfolist(opt), DECODE_Bx(instr));
     optimize_settype(opt, rindx, type);
 }
 
@@ -108,7 +104,7 @@ void sgl_trackingfn(optimizer *opt) {
     } else globalinfolist_setvalue(glist, gindx);
     
     value type = optimize_type(opt, rindx);
-    globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt), type);
+    globalinfolist_settype(glist, gindx, type);
 }
 
 void arith_trackingfn(optimizer *opt) {
@@ -205,20 +201,6 @@ void cat_trackingfn(optimizer *opt) {
 }
 
 /* **********************************************************************
- * Opcode replacement functions
- * ********************************************************************** */
-
-void lgl_replacementfn(optimizer *opt) {
-    instruction instr = optimize_getinstruction(opt);
-    globalinfolist_removeread(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
-}
-
-void sgl_replacementfn(optimizer *opt) {
-    instruction instr = optimize_getinstruction(opt);
-    globalinfolist_removestore(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
-}
-
-/* **********************************************************************
  * Opcode definition table
  * ********************************************************************** */
 
@@ -257,8 +239,8 @@ opcodeinfo opcodetable[] = {
     { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL, NULL },
     
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL, NULL },
-    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, lgl_replacementfn },
-    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, sgl_replacementfn },
+    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, NULL },
+    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, NULL },
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lpr_trackingfn, NULL, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },

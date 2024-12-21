@@ -23,8 +23,10 @@ typedef enum {
 typedef struct {
     globalcontents contents; /** What the global contains */
     value val; /** Value from constant */
-    dictionary src; /** A dictionary of instruction indices that store to this global */
-    dictionary read; /** A dictionary of instruction indices that read from this global */
+    int nstore; /** Number of times global is stored to */
+    int nread; /** Number of times global is read from */
+    varray_value typeassignments; /** A dictionary of types stored to this global in the current pass */
+    value type;
 } glblinfo;
 
 typedef struct {
@@ -40,16 +42,16 @@ void globalinfolist_setconstant(globalinfolist *glist, int gindx, value konst);
 
 bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst);
 
-void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src, value type);
-
+void globalinfolist_settype(globalinfolist *glist, int gindx, value type);
 value globalinfolist_type(globalinfolist *glist, int gindx);
 
-void globalinfolist_removestore(globalinfolist *glist, int gindx, instructionindx src);
-unsigned int globalinfolist_countstore(globalinfolist *glist, int gindx);
+void globalinfolist_store(globalinfolist *glist, int gindx);
+int globalinfolist_countstore(globalinfolist *glist, int gindx);
 
-void globalinfolist_read(globalinfolist *glist, int gindx, instructionindx src);
-void globalinfolist_removeread(globalinfolist *glist, int gindx, instructionindx src);
-unsigned int globalinfolist_countread(globalinfolist *glist, int gindx);
+void globalinfolist_read(globalinfolist *glist, int gindx);
+int globalinfolist_countread(globalinfolist *glist, int gindx);
+
+void globalinfolist_startpass(globalinfolist *glist);
 
 void globalinfolist_show(globalinfolist *glist);
 

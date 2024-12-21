@@ -274,8 +274,8 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr) {
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
     instruction oinstr = opt->prog->code.data[i];
     
-    opcodetrackingfn replacefn=opcode_getreplacefn(DECODE_OP(oinstr));
-    if (replacefn) replacefn(opt);
+    //opcodetrackingfn replacefn=opcode_getreplacefn(DECODE_OP(oinstr));
+    //if (replacefn) replacefn(opt);
     
     opt->prog->code.data[i]=instr;
     opt->nchanged++;
@@ -521,6 +521,8 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
             printf("\n");
         }
     }
+    
+    return true; 
 }
 
 /** Sets the contents of registers from knowledge of the function signature */
@@ -689,9 +691,33 @@ bool optimize_block(optimizer *opt, block *blk) {
     return true;
 }
 
+/* **********************************************************************
+ * Optimization passes
+ * ********************************************************************** */
+
+/** Computes the usage of globals from a block by looping over and analyzing instructions */
+void optimize_globalusageforblock(optimizer *opt, block *blk) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        instruction op=DECODE_OP(instr);
+        if (op==OP_LGL) globalinfolist_read(&opt->glist, DECODE_Bx(instr));
+        else if (op==OP_SGL) globalinfolist_store(&opt->glist, DECODE_Bx(instr));
+    }
+}
+
+/** Computes usage of global variables */
+void optimize_globalusage(optimizer *opt) {
+    globalinfolist_startpass(&opt->glist);
+    for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
+        optimize_globalusageforblock(opt, &opt->graph.data[i]);
+    }
+}
+
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
-    opt->pass=n; 
+    optimize_globalusage(opt);
+    
+    opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) optimize_block(opt, &opt->graph.data[i]);
 }
