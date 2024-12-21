@@ -723,8 +723,6 @@ bool optimize(program *in) {
         layout(&opt);
     }
     
-    if (opt.verbose) morpho_disassemble(NULL, in, NULL);
-    
     optimize_clear(&opt);
     return true;
 }
