@@ -111,6 +111,8 @@ void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, in
                                            DECODE_A(last),
                                            newdest - newend -1);
         blockcomposer_setinstructionat(comp, newend, newinstr);
+    } else {
+        UNREACHABLE("Missing block");
     }
 }
 
@@ -195,19 +197,21 @@ void layout_sortcfgraph(optimizer *opt) {
 void layout_deleteunused(optimizer *opt) {
     varray_instruction *code = &opt->prog->code;
     
-    indx blkindx=0;
-    block *blk = &opt->graph.data[blkindx];
+    instructionindx last = 0;
     
-    // Loop over instructions
-    for (indx i=0; i<code->count && blkindx<opt->graph.count; i++) {
-        if (i>blk->end) { // Check whether we need to move to the next block
-            blkindx++;
-            blk = &opt->graph.data[blkindx];
-        }
+    for (indx i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
         
-        // Check if this instruction is in the current block and if not delete it
-        if (!(i>=blk->start && i<=blk->end)) optimize_replaceinstructionat(opt, i, ENCODE_BYTE(OP_NOP));
+        // Erase any instructions before this block
+        for (instructionindx k=last; k<blk->start; k++) optimize_replaceinstructionat(opt, k, ENCODE_BYTE(OP_NOP));
+            
+        last = blk->end+1;
     }
+    
+    // Erase to end of program
+    for (instructionindx k=last; k<opt->prog->code.count; k++) optimize_replaceinstructionat(opt, k, ENCODE_BYTE(OP_NOP));
+    
+    varray_instructionwrite(&opt->prog->code, ENCODE_BYTE(OP_END));
 }
 
 /* **********************************************************************
@@ -325,6 +329,9 @@ void layout_consolidate(optimizer *opt) {
     for (unsigned int i=0; i<comp.graph->count; i++) {
         blockcomposer_processblock(&comp, comp.graph->data+i);
     }
+    
+    cfgraph_show(comp.graph);
+    cfgraph_show(&comp.outgraph);
     
     // Fix branch instructions
     for (unsigned int i=0; i<comp.graph->count; i++) {

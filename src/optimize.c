@@ -507,10 +507,10 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
     blk->end+=ninsert;
     opt->insertions.count=0; // Clear insertions
     
-    // Fix starting indices for subsequent blocks
+    // Fix starting and ending indices for subsequent blocks
     for (int i=0; i<opt->graph.count; i++) {
         block *b = &opt->graph.data[i];
-        if (b->start>blk->start) b->start+=ninsert;
+        if (b->start>blk->start) { b->start+=ninsert; b->end+=ninsert; } 
     }
     
     if (opt->verbose) {
@@ -522,7 +522,7 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
         }
     }
     
-    return true; 
+    return true;
 }
 
 /** Sets the contents of registers from knowledge of the function signature */
