@@ -23,7 +23,7 @@ typedef struct {
     varray_instruction out;
     dictionary outtables;
     
-    dictionary map;
+    //dictionary map;
 } blockcomposer;
 
 /** Initialize composer structure */
@@ -34,8 +34,6 @@ void blockcomposer_init(blockcomposer *comp, program *in, cfgraph *graph) {
     cfgraph_init(&comp->outgraph);
     varray_instructioninit(&comp->out);
     dictionary_init(&comp->outtables);
-    
-    dictionary_init(&comp->map);
 }
 
 /** Clear composer structure */
@@ -43,8 +41,6 @@ void blockcomposer_clear(blockcomposer *comp) {
     cfgraph_clear(&comp->outgraph);
     varray_instructionclear(&comp->out);
     dictionary_clear(&comp->outtables);
-    
-    dictionary_clear(&comp->map);
 }
 
 /** Retrieve instruction at a given index */
@@ -66,7 +62,6 @@ void blockcomposer_setinstructionat(blockcomposer *comp, instructionindx i, inst
 /** Adds a block to the composer data structure */
 void blockcomposer_addblock(blockcomposer *comp, block *old, block *new) {
     varray_blockadd(&comp->outgraph, new, 1);
-    dictionary_insert(&comp->map, MORPHO_INTEGER(old->start), MORPHO_INTEGER(new->start));
 }
 
 /** Adds a branch table to the composer data structure */
@@ -79,15 +74,14 @@ bool blockcomposer_findsrc(blockcomposer *comp, instructionindx start, block **o
     return cfgraph_findblock(comp->graph, start, out);
 }
 
-/** Maps a block id to the new block id */
-bool blockcomposer_map(blockcomposer *comp, instructionindx old, instructionindx *new) {
-    value val;
-    bool success=dictionary_get(&comp->map, MORPHO_INTEGER(old), &val);
-    
-    if (success && new) {
-        *new = MORPHO_GETINTEGERVALUE(val);
+/** Maps an instruction indx that starts a block to a new instruction */
+bool blockcomposer_mapinstructionindx(blockcomposer *comp, instructionindx old, instructionindx *new) {
+    bool success=false;
+    blockindx bindx;
+    if (cfgraph_findblockindx(comp->graph, old, &bindx)) {
+        *new = comp->outgraph.data[bindx].start;
+        success=true;
     }
-    
     return success;
 }
 
@@ -104,12 +98,13 @@ int blockcomposer_dictflatten(dictionary *dict, int nmax, instructionindx *indx)
     return k;
 }
 
-void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, instructionindx dest) {
-    instructionindx newdest;
-    if (blockcomposer_map(comp, dest, &newdest)) {
-        instruction newinstr = ENCODE_LONG(DECODE_OP(last), 
+void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, blockindx dest) {
+    block *destblk;
+    
+    if (cfgraph_indx(&comp->outgraph, dest, &destblk)) {
+        instruction newinstr = ENCODE_LONG(DECODE_OP(last),
                                            DECODE_A(last),
-                                           newdest - newend -1);
+                                           destblk->start - newend -1);
         blockcomposer_setinstructionat(comp, newend, newinstr);
     } else {
         UNREACHABLE("Missing block");
@@ -117,7 +112,12 @@ void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, in
 }
 
 /** Fixes branch instructions */
-void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
+void blockcomposer_fixbranch(blockcomposer *comp, blockindx i) {
+    block *old, *new;
+    
+    if (!(cfgraph_indx(comp->graph, i, &old) &&
+         cfgraph_indx(&comp->outgraph, i, &new))) return;
+    
     instruction last = blockcomposer_getinstruction(comp, old->end);
     if (!((opcode_getflags(DECODE_OP(last)) & (OPCODE_BRANCH | OPCODE_BRANCH_TABLE)) )) return; // Only process branches
     
@@ -128,10 +128,10 @@ void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
         _fixbrnch(comp, last, new->end, dest[0]);
         
     } else if (DECODE_OP(last)==OP_BIF || DECODE_OP(last)==OP_BIFF) {
-        if (dest[0]!=old->end+1) {
-            _fixbrnch(comp, last, new->end, dest[0]);
-        } else {
+        if (dest[0]==i+1) {
             _fixbrnch(comp, last, new->end, dest[1]);
+        } else {
+            _fixbrnch(comp, last, new->end, dest[0]);
         }
         
     } else if (DECODE_OP(last)==OP_PUSHERR) {
@@ -151,7 +151,7 @@ void blockcomposer_fixbranchtable(blockcomposer *comp, dictionary *table) {
         indx old = MORPHO_GETINTEGERVALUE(table->contents[i].val);
         instructionindx new;
         
-        if (blockcomposer_map(comp, old, &new)) {
+        if (blockcomposer_mapinstructionindx(comp, old, &new)) {
             dictionary_insert(table, key, MORPHO_INTEGER(new));
         }
     }
@@ -159,8 +159,7 @@ void blockcomposer_fixbranchtable(blockcomposer *comp, dictionary *table) {
 
 /** Fixes the function corresponding */
 void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func) {
-    instructionindx entry;
-    if (blockcomposer_map(comp, func->entry, &entry)) func->entry=entry;
+    blockcomposer_mapinstructionindx(comp, func->entry, &func->entry);
 }
 
 /** Processes a block by copying instructions from a source block  */
@@ -330,12 +329,11 @@ void layout_consolidate(optimizer *opt) {
         blockcomposer_processblock(&comp, comp.graph->data+i);
     }
     
-    cfgraph_show(comp.graph);
-    cfgraph_show(&comp.outgraph);
+    if (opt->verbose) cfgraph_show(&comp.outgraph);
     
     // Fix branch instructions
     for (unsigned int i=0; i<comp.graph->count; i++) {
-        blockcomposer_fixbranch(&comp, comp.graph->data+i, comp.outgraph.data+i);
+        blockcomposer_fixbranch(&comp, i);
     }
     
     // Fix branch tables
