@@ -456,7 +456,7 @@ int optimize_countinsertions(optimizer *opt, block *blk) {
     int n=0;
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = optimize_getinstructionat(opt, i);
-        if (DECODE_OP(instr)==OP_INSERT) n+=DECODE_A(instr);
+        if (DECODE_OP(instr)==OP_INSERT) n+=DECODE_A(instr)-1; // Less one to account for the OP_INSERT instruction
     }
     return n;
 }
@@ -490,16 +490,15 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
     
     instructionindx k=blk->end+ninsert; // Destination index
     // Loop backwards over block copying in insertions
-    for (instructionindx i=blk->end; i>=blk->start; i--) {
+    for (instructionindx i=blk->end; i>=blk->start; i--, k--) {
         instruction instr = optimize_getinstructionat(opt, i);
         if (DECODE_OP(instr)==OP_INSERT) {
             int n=DECODE_A(instr);
-            k-=n;
-            memcpy(code->data+k+1, opt->insertions.data+DECODE_Bx(instr), n*sizeof(instruction));
-            _fixannotation(opt, i, n);
+            k-=(n-1);
+            memcpy(code->data+k, opt->insertions.data+DECODE_Bx(instr), n*sizeof(instruction));
+            _fixannotation(opt, i, n-1);
         } else {
             code->data[k]=code->data[i];
-            k--;
         }
     }
     
