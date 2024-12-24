@@ -159,8 +159,8 @@ void blockcomposer_fixbranchtable(blockcomposer *comp, dictionary *table) {
 }
 
 /** Fixes the function corresponding */
-void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func) {
-    blockcomposer_mapinstructionindx(comp, func->entry, &func->entry);
+void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func, instructionindx entry) {
+    func->entry=entry;
 }
 
 /** Processes a block by copying instructions from a source block  */
@@ -181,7 +181,7 @@ void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     
     blockcomposer_addblock(comp, blk, &out);
     
-    if (block_isentry(blk)) blockcomposer_fixfunction(comp, blk->func);
+    if (block_isentry(blk)) blockcomposer_fixfunction(comp, blk->func, out.start);
 }
 
 /* **********************************************************************

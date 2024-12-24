@@ -398,7 +398,10 @@ void optimize_disassemble(optimizer *opt) {
 }
 
 bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary *checked) {
-    dictionary_insert(checked, MORPHO_INTEGER(blk->start), MORPHO_NIL); // Mark this dictionary as checked
+    blockindx blkindx;
+    if (!cfgraph_findindx(&opt->graph, blk, &blkindx)) return false;
+    
+    dictionary_insert(checked, MORPHO_INTEGER(blkindx), MORPHO_NIL); // Mark this dictionary as checked
     
     for (int i=0; i<blk->dest.capacity; i++) {
         value key = blk->dest.contents[i].key;
@@ -407,6 +410,7 @@ bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary 
         if (MORPHO_ISINTEGER(key) &&
             !dictionary_get(checked, key, NULL) && // Ensure the block hasn't been checked
             cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
+            
             if (block_uses(dest, rindx)) return true;
             
             if (!block_writes(dest, rindx) &&

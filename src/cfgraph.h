@@ -29,6 +29,8 @@ typedef struct sblock {
     
     objectfunction *func; /** Function that encapsulates the block */
     
+    bool isentry; /** Is this the entry point for the function */
+    
     reginfolist rout; /** Contents of registers on exit */
 } block;
 
@@ -71,6 +73,7 @@ void cfgraph_sort(cfgraph *graph);
 bool cfgraph_findblock(cfgraph *graph, instructionindx start, block **out);
 bool cfgraph_findblockindx(cfgraph *graph, instructionindx start, blockindx *out);
 bool cfgraph_indx(cfgraph *graph, blockindx bindx, block **out);
+bool cfgraph_findindx(cfgraph *graph, block *blk, blockindx *out);
 
 void cfgraph_build(program *in, cfgraph *out, bool verbose);
 

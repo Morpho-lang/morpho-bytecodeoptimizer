@@ -21,6 +21,7 @@ void block_init(block *b, objectfunction *func) {
     b->start=INSTRUCTIONINDX_EMPTY;
     b->end=INSTRUCTIONINDX_EMPTY;
     b->func=func;
+    b->isentry=false;
     
     reginfolist_init(&b->rout, func->nregs);
     
@@ -114,7 +115,7 @@ void block_setdest(block *b, blockindx indx) {
 
 /** Determines of a block is the entry point of the function */
 bool block_isentry(block *b) {
-    return (b->func) && (b->func->entry == (indx) b->start);
+    return b->isentry;
 }
 
 /** Get a constant from a block */
@@ -196,6 +197,12 @@ bool cfgraph_indx(cfgraph *graph, blockindx bindx, block **out) {
     if (bindx>=graph->count) return false;
     *out = &graph->data[bindx];
     return true;
+}
+
+/** Returns a block pointer from a blockindx  */
+bool cfgraph_findindx(cfgraph *graph, block *blk, blockindx *out) {
+    *out = (blockindx) (blk - graph->data);
+    return (*out < graph->count);
 }
 
 /* **********************************************************************
@@ -372,8 +379,10 @@ void cfgraphbuilder_branchtable(cfgraphbuilder *bld, indx kindx) {
 /** Creates a new basic block starting at a given instruction */
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
-    block_init(&blk, cfgraphbuilder_currentfn(bld));
+    objectfunction *fn = cfgraphbuilder_currentfn(bld);
+    block_init(&blk, fn);
     blk.start=start;
+    blk.isentry=(fn->entry==start);
     
     instructionindx i;
     for (i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
