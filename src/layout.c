@@ -128,7 +128,8 @@ void blockcomposer_fixbranch(blockcomposer *comp, blockindx i) {
         _fixbrnch(comp, last, new->end, dest[0]);
         
     } else if (DECODE_OP(last)==OP_BIF || DECODE_OP(last)==OP_BIFF) {
-        if (dest[0]==i+1) {
+        if (n<2 && DECODE_sBx(last)!=0) UNREACHABLE("Couldn't fix branch instruction due to error in control flow graph");
+        if (n>1 && dest[0]==i+1) {
             _fixbrnch(comp, last, new->end, dest[1]);
         } else {
             _fixbrnch(comp, last, new->end, dest[0]);
