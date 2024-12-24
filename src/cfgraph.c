@@ -17,8 +17,9 @@ DEFINE_VARRAY(value, value)
  * ********************************************************************** */
 
 /** Initializes a basic block structure */
-void block_init(block *b, objectfunction *func) {
-    b->start=INSTRUCTIONINDX_EMPTY;
+void block_init(block *b, objectfunction *func, instructionindx start) {
+    b->start=start;
+    b->ostart=start;
     b->end=INSTRUCTIONINDX_EMPTY;
     b->func=func;
     b->isentry=false;
@@ -189,6 +190,20 @@ bool cfgraph_findblockindx(cfgraph *graph, instructionindx start, blockindx *out
     block key = { .start = start };
     block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockcmp);
     if (out) *out = (blockindx) (srch - graph->data);
+    return srch;
+}
+
+int _blockostartcmp(const void *a, const void *b) {
+    block *aa = (block *) a;
+    block *bb = (block *) b;
+    return ((int) aa->ostart) - ((int) bb->ostart);
+}
+
+/** Find a block in a sorted cfgraph */
+bool cfgraph_findblockostart(cfgraph *graph, instructionindx start, block **out) {
+    block key = { .ostart = start };
+    block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockostartcmp);
+    if (out) *out=srch;
     return srch;
 }
 
@@ -380,8 +395,7 @@ void cfgraphbuilder_branchtable(cfgraphbuilder *bld, indx kindx) {
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
     objectfunction *fn = cfgraphbuilder_currentfn(bld);
-    block_init(&blk, fn);
-    blk.start=start;
+    block_init(&blk, fn, start);
     blk.isentry=(fn->entry==start);
     
     instructionindx i;

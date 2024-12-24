@@ -21,6 +21,8 @@ typedef struct sblock {
     instructionindx start; /** First instruction in the block */
     instructionindx end; /** Last instruction in the block */
     
+    instructionindx ostart; /** First instruction in the block as in original src */
+    
     dictionary dest; /** Destination blocks */
     dictionary src; /** Source blocks */
     
@@ -47,7 +49,7 @@ typedef indx blockindx;
  * Interface
  * ********************************************************************** */
 
-void block_init(block *b, objectfunction *func);
+void block_init(block *b, objectfunction *func, instructionindx start);
 void block_clear(block *b);
 
 void block_setuses(block *b, registerindx r);
@@ -72,6 +74,7 @@ void cfgraph_show(cfgraph *graph);
 void cfgraph_sort(cfgraph *graph);
 bool cfgraph_findblock(cfgraph *graph, instructionindx start, block **out);
 bool cfgraph_findblockindx(cfgraph *graph, instructionindx start, blockindx *out);
+bool cfgraph_findblockostart(cfgraph *graph, instructionindx start, block **out);
 bool cfgraph_indx(cfgraph *graph, blockindx bindx, block **out);
 bool cfgraph_findindx(cfgraph *graph, block *blk, blockindx *out);
 

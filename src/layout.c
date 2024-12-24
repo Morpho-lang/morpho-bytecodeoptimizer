@@ -74,17 +74,6 @@ bool blockcomposer_findsrc(blockcomposer *comp, instructionindx start, block **o
     return cfgraph_findblock(comp->graph, start, out);
 }
 
-/** Maps an instruction indx that starts a block to a new instruction */
-bool blockcomposer_mapinstructionindx(blockcomposer *comp, instructionindx old, instructionindx *new) {
-    bool success=false;
-    blockindx bindx;
-    if (cfgraph_findblockindx(comp->graph, old, &bindx)) {
-        *new = comp->outgraph.data[bindx].start;
-        success=true;
-    }
-    return success;
-}
-
 /** Flattens the contents of a dictionary into  */
 int blockcomposer_dictflatten(dictionary *dict, int nmax, instructionindx *indx) {
     int k=0;
@@ -143,18 +132,32 @@ void blockcomposer_fixbranch(blockcomposer *comp, blockindx i) {
     }
 }
 
+/** Maps an instruction indx that starts a block in the original source to a new instruction */
+bool _mapblockostart(blockcomposer *comp, instructionindx old, instructionindx *new) {
+    bool success=false;
+    instructionindx blkindx;
+    block *dest;
+    if (cfgraph_findblockostart(comp->graph, old, &dest) && // Find block in old cfgraph
+        cfgraph_findindx(comp->graph, dest, &blkindx) && // Retrieve the index
+        cfgraph_indx(&comp->outgraph, blkindx, &dest)) { // Find the corresponding block in the new cfgraph
+        *new = dest->start;
+        success=true;
+    }
+    return success;
+}
+
 /** Fixes a branch table */
 void blockcomposer_fixbranchtable(blockcomposer *comp, dictionary *table) {
     for (int i=0; i<table->capacity; i++) {
         value key = table->contents[i].key;
         if (MORPHO_ISNIL(key)) continue;
         
-        indx old = MORPHO_GETINTEGERVALUE(table->contents[i].val);
+        instructionindx old = MORPHO_GETINTEGERVALUE(table->contents[i].val);
         instructionindx new;
         
-        if (blockcomposer_mapinstructionindx(comp, old, &new)) {
+        if (_mapblockostart(comp, old, &new)) {
             dictionary_insert(table, key, MORPHO_INTEGER(new));
-        }
+        } else UNREACHABLE("Branch table entry not found.");
     }
 }
 
@@ -166,9 +169,7 @@ void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func, instru
 /** Processes a block by copying instructions from a source block  */
 void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     block out;
-    block_init(&out, blk->func);
-    
-    out.start=comp->out.count;
+    block_init(&out, blk->func, comp->out.count);
     
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = blockcomposer_getinstruction(comp, i);
