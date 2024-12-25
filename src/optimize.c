@@ -759,7 +759,7 @@ bool optimize(program *in) {
  * Initialization/Finalization
  * ********************************************************************** */
 
-value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
+value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -788,6 +788,9 @@ void bytecodeoptimizer_initialize(void) {
     
     objectstring tuplelabel = MORPHO_STATICSTRING(TUPLE_CLASSNAME);
     typetuple = builtin_findclass(MORPHO_OBJECT(&tuplelabel));
+    
+    objectstring classlabel = MORPHO_STATICSTRING(CLASS_CLASSNAME);
+    typeclass = builtin_findclass(MORPHO_OBJECT(&classlabel));
 }
 
 void bytecodeoptimizer_finalize(void) {

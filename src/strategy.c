@@ -332,8 +332,15 @@ bool strategy_method_resolution(optimizer *opt) {
     value type = optimize_type(opt, DECODE_A(instr)+1);
     indx kindx;
     
+    if (MORPHO_ISEQUAL(type, typeclass)) { // Handle calls on a class 
+        if (optimize_isconstant(opt, DECODE_A(instr)+1, &kindx)) {
+            type=optimize_getconstant(opt, kindx);
+        } else return false;
+    }
+    
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
         optimize_isconstant(opt, DECODE_A(instr), &kindx)) {
+        
         objectclass *klass = MORPHO_GETCLASS(type);
         value label = optimize_getconstant(opt, kindx);
         
