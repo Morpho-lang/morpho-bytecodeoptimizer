@@ -11,8 +11,6 @@ Some instructions MAY generate side effects (and are marked as doing so)
 
 Some optimizations on these are possible, but require the optimizer to check for side effects. We need a mechanism for this.
 
-## Mechanism to insert additional instructions
-
 ## Additional strategies
 
 * Specialized instructions for common cases:
