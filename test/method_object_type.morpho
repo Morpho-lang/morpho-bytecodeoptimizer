@@ -1,0 +1,30 @@
+// Method resolution
+
+import bytecodeoptimizer
+
+class Foo {
+  foo() {
+    print "Foo"
+  }
+
+  boo() {
+    self.foo() 
+  }
+}
+
+class Boo is Foo {
+  goo() {
+    print "Goo"
+  }
+
+  boo() {
+    self.goo() 
+  }
+}
+
+var a = Foo() 
+var b = Boo() 
+
+a.boo() // expect: Foo 
+b.boo() // expect: Goo
+

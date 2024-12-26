@@ -30,6 +30,8 @@ void optimizer_init(optimizer *opt, program *prog) {
     globalinfolist_init(&opt->glist, prog->globals.count);
     varray_instructioninit(&opt->insertions);
     
+    dictionary_init(&opt->methodinfo);
+    
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
     
@@ -48,8 +50,68 @@ void optimize_clear(optimizer *opt) {
     globalinfolist_clear(&opt->glist);
     varray_instructionclear(&opt->insertions);
     
+    dictionary_clear(&opt->methodinfo);
+    
     if (opt->v) morpho_freevm(opt->v);
     if (opt->temp) morpho_freeprogram(opt->temp);
+}
+
+/* **********************************************************************
+ * Methodinfo
+ * ********************************************************************** */
+
+// Adds a method into the methodinfo dictionary
+void _processfunction(objectfunction *fn, dictionary *out) {
+    value res = MORPHO_INTEGER(1);
+    if (dictionary_get(out, MORPHO_OBJECT(fn), &res) &&
+        MORPHO_ISINTEGER(res)) {
+        res = MORPHO_INTEGER(MORPHO_GETINTEGERVALUE(res)+1);
+    }
+    dictionary_insert(out, MORPHO_OBJECT(fn), res);
+}
+
+// Searches a metafunction for methods
+void _processmetafunction(objectmetafunction *mfn, dictionary *out) {
+    for (int i=0; i<mfn->fns.count; i++) {
+        value fn = mfn->fns.data[i];
+        if (MORPHO_ISFUNCTION(fn)) {
+            _processfunction(MORPHO_GETFUNCTION(fn), out);
+        }
+    }
+}
+
+// Searches a class's method table
+void _processclass(objectclass *klass, dictionary *out) {
+    for (int i=0; i<klass->methods.capacity; i++) {
+        value label = klass->methods.contents[i].key;
+        if (MORPHO_ISNIL(label)) continue;
+        
+        value method = klass->methods.contents[i].val;
+        if (MORPHO_ISFUNCTION(method)) {
+            _processfunction(MORPHO_GETFUNCTION(method), out);
+        } else if (MORPHO_ISMETAFUNCTION(method)) {
+            _processmetafunction(MORPHO_GETMETAFUNCTION(method), out);
+        }
+    }
+}
+
+/* Compute method info */
+void optimize_methodinfo(optimizer *opt) {
+    varray_value *klasses = &opt->prog->classes;
+    
+    for (int i=0; i<klasses->count; i++) {
+        _processclass(MORPHO_GETCLASS(klasses->data[i]), &opt->methodinfo);
+    }
+}
+
+/* Retrieve the count of method owners */
+int optimize_methodcountowners(optimizer *opt, objectfunction *method) {
+    value count;
+    int nowners = 0;
+    if (dictionary_get(&opt->methodinfo, MORPHO_OBJECT(method), &count) &&
+        MORPHO_ISINTEGER(count)) nowners = MORPHO_GETINTEGERVALUE(count);
+        
+    return nowners;
 }
 
 /* **********************************************************************
@@ -532,6 +594,13 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
 void optimize_signature(optimizer *opt) {
     objectfunction *func = optimize_currentblock(opt)->func;
     
+    // Set object type if the method isn't used by multiple classes 
+    if (func->klass &&
+        optimize_methodcountowners(opt, func)==1) {
+        reginfolist_write(&opt->rlist, func->entry, 0, REG_PARAMETER, 0);
+        reginfolist_settype(&opt->rlist, 0, MORPHO_OBJECT(func->klass));
+    }
+    
     value type;
     for (registerindx i=0; i<func->nargs; i++) {
         reginfolist_write(&opt->rlist, func->entry, i+1, REG_PARAMETER, 0);
@@ -733,6 +802,8 @@ bool optimize(program *in) {
     optimizer opt;
     
     optimizer_init(&opt, in);
+    
+    optimize_methodinfo(&opt);
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);
     
