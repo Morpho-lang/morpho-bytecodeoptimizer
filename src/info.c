@@ -13,13 +13,14 @@
 void globalinfo_init(glblinfo *info) {
     info->contents=GLOBAL_EMPTY;
     info->val=MORPHO_NIL;
-    dictionary_init(&info->read);
-    dictionary_init(&info->src);
+    info->nread=0;
+    info->nstore=0;
+    varray_valueinit(&info->typeassignments);
+    info->type=MORPHO_NIL;
 }
 
 void globalinfo_clear(glblinfo *info) {
-    dictionary_clear(&info->read);
-    dictionary_clear(&info->src);
+    varray_valueclear(&info->typeassignments);
 }
 
 /** Allocate and initialize a global info list */
@@ -67,64 +68,56 @@ bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst) {
     return false;
 }
 
-/** Adds a store instruction to a global */
-void globalinfolist_store(globalinfolist *glist, int gindx, instructionindx src, value type) {
-    dictionary_insert(&glist->list[gindx].src, MORPHO_INTEGER(src), type);
+/** Sets a possible type assignment to a global */
+void globalinfolist_settype(globalinfolist *glist, int gindx, value type) {
+    varray_value *assignments = &glist->list[gindx].typeassignments;
+    
+    for (int i=0; i<assignments->count; i++) if (MORPHO_ISEQUAL(assignments->data[i], type)) return;
+    
+    varray_valuewrite(assignments, type);
 }
 
 /** Gets the type of a global */
 value globalinfolist_type(globalinfolist *glist, int gindx) {
-    dictionary *dict = &glist->list[gindx].src;
-    value type = MORPHO_NIL;
-    
-    for (int i=0; i<dict->capacity; i++) {
-        if (!MORPHO_ISNIL(dict->contents[i].key)) {
-            value thistype = dict->contents[i].val;
-            if (MORPHO_ISNIL(thistype)) { // An unknown type always wins
-                return thistype;
-            } else if (MORPHO_ISNIL(type)) {
-                type = thistype;
-            } else if (!MORPHO_ISSAME(type, thistype)) {
-                return MORPHO_NIL; // If there's a conflict, type is unknown
-            }
-        }
-    }
-    
-    return type;
+    return glist->list[gindx].type;
 }
 
+/** Gets the type of a global */
+void globalinfolist_computetype(globalinfolist *glist, int gindx) {
+    varray_value *assignments = &glist->list[gindx].typeassignments;
+    
+    if (assignments->count>1 || assignments->count==0) glist->list[gindx].type=MORPHO_NIL;
+    else glist->list[gindx].type=assignments->data[0];
+}
 
-/** Removes a store instruction to a global */
-void globalinfolist_removestore(globalinfolist *glist, int gindx, instructionindx src) {
-    dictionary_remove(&glist->list[gindx].src, MORPHO_INTEGER(src));
+/** Adds a store instruction to a global */
+void globalinfolist_store(globalinfolist *glist, int gindx) {
+    glist->list[gindx].nstore++;
 }
 
 /** Count number of instructions that store to this global */
-unsigned int globalinfolist_countstore(globalinfolist *glist, int gindx) {
-    return glist->list[gindx].src.count;
+int globalinfolist_countstore(globalinfolist *glist, int gindx) {
+    return glist->list[gindx].nstore;
 }
 
 /** Adds a read instruction to a global */
-void globalinfolist_read(globalinfolist *glist, int gindx, instructionindx src) {
-    dictionary_insert(&glist->list[gindx].read, MORPHO_INTEGER(src), MORPHO_NIL);
-}
-
-/** Removes a store instruction from a global */
-void globalinfolist_removeread(globalinfolist *glist, int gindx, instructionindx src) {
-    dictionary_remove(&glist->list[gindx].read, MORPHO_INTEGER(src));
+void globalinfolist_read(globalinfolist *glist, int gindx) {
+    glist->list[gindx].nread++;
 }
 
 /** Count number of instructions that read from this global */
-unsigned int globalinfolist_countread(globalinfolist *glist, int gindx) {
-    return glist->list[gindx].read.count;
+int globalinfolist_countread(globalinfolist *glist, int gindx) {
+    return glist->list[gindx].nread;
 }
 
-void _showdict(char *label, dictionary *dict) {
-    printf("(%s ", label);
-    for (unsigned int i=0; i<dict->capacity; i++) {
-        if (!MORPHO_ISNIL(dict->contents[i].key)) printf("%i ", MORPHO_GETINTEGERVALUE(dict->contents[i].key));
+/** Rest global information before an optimization pass */
+void globalinfolist_startpass(globalinfolist *glist) {
+    for (int i=0; i<glist->nglobals; i++) {
+        globalinfolist_computetype(glist, i);
+        glist->list[i].nread=0;
+        glist->list[i].nstore=0;
+        glist->list[i].typeassignments.count=0; // Clear assignments from previous pass
     }
-    printf(") ");
 }
 
 /** Show the global info list */
@@ -142,8 +135,7 @@ void globalinfolist_show(globalinfolist *glist) {
             case GLOBAL_VALUE:
                 printf("v ");
         }
-        _showdict("r:", &glist->list[i].read);
-        _showdict("w:", &glist->list[i].src);
+        printf("r: %i w: %i ", glist->list[i].nread, glist->list[i].nstore);
         
         value type = globalinfolist_type(glist, i);
         if (!MORPHO_ISNIL(type)) morpho_printvalue(NULL, type);

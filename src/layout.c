@@ -23,7 +23,7 @@ typedef struct {
     varray_instruction out;
     dictionary outtables;
     
-    dictionary map;
+    //dictionary map;
 } blockcomposer;
 
 /** Initialize composer structure */
@@ -34,8 +34,6 @@ void blockcomposer_init(blockcomposer *comp, program *in, cfgraph *graph) {
     cfgraph_init(&comp->outgraph);
     varray_instructioninit(&comp->out);
     dictionary_init(&comp->outtables);
-    
-    dictionary_init(&comp->map);
 }
 
 /** Clear composer structure */
@@ -43,8 +41,6 @@ void blockcomposer_clear(blockcomposer *comp) {
     cfgraph_clear(&comp->outgraph);
     varray_instructionclear(&comp->out);
     dictionary_clear(&comp->outtables);
-    
-    dictionary_clear(&comp->map);
 }
 
 /** Retrieve instruction at a given index */
@@ -66,7 +62,6 @@ void blockcomposer_setinstructionat(blockcomposer *comp, instructionindx i, inst
 /** Adds a block to the composer data structure */
 void blockcomposer_addblock(blockcomposer *comp, block *old, block *new) {
     varray_blockadd(&comp->outgraph, new, 1);
-    dictionary_insert(&comp->map, MORPHO_INTEGER(old->start), MORPHO_INTEGER(new->start));
 }
 
 /** Adds a branch table to the composer data structure */
@@ -76,19 +71,7 @@ void blockcomposer_addbranchtable(blockcomposer *comp, value table) {
 
 /** Find a block in the source graph */
 bool blockcomposer_findsrc(blockcomposer *comp, instructionindx start, block **out) {
-    return cfgraph_findsrtd(comp->graph, start, out);
-}
-
-/** Maps a block id to the new block id */
-bool blockcomposer_map(blockcomposer *comp, instructionindx old, instructionindx *new) {
-    value val;
-    bool success=dictionary_get(&comp->map, MORPHO_INTEGER(old), &val);
-    
-    if (success && new) {
-        *new = MORPHO_GETINTEGERVALUE(val);
-    }
-    
-    return success;
+    return cfgraph_findblock(comp->graph, start, out);
 }
 
 /** Flattens the contents of a dictionary into  */
@@ -104,18 +87,26 @@ int blockcomposer_dictflatten(dictionary *dict, int nmax, instructionindx *indx)
     return k;
 }
 
-void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, instructionindx dest) {
-    instructionindx newdest;
-    if (blockcomposer_map(comp, dest, &newdest)) {
-        instruction newinstr = ENCODE_LONG(DECODE_OP(last), 
+void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, blockindx dest) {
+    block *destblk;
+    
+    if (cfgraph_indx(&comp->outgraph, dest, &destblk)) {
+        instruction newinstr = ENCODE_LONG(DECODE_OP(last),
                                            DECODE_A(last),
-                                           newdest - newend -1);
+                                           destblk->start - newend -1);
         blockcomposer_setinstructionat(comp, newend, newinstr);
+    } else {
+        UNREACHABLE("Missing block");
     }
 }
 
 /** Fixes branch instructions */
-void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
+void blockcomposer_fixbranch(blockcomposer *comp, blockindx i) {
+    block *old, *new;
+    
+    if (!(cfgraph_indx(comp->graph, i, &old) &&
+         cfgraph_indx(&comp->outgraph, i, &new))) return;
+    
     instruction last = blockcomposer_getinstruction(comp, old->end);
     if (!((opcode_getflags(DECODE_OP(last)) & (OPCODE_BRANCH | OPCODE_BRANCH_TABLE)) )) return; // Only process branches
     
@@ -126,10 +117,11 @@ void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
         _fixbrnch(comp, last, new->end, dest[0]);
         
     } else if (DECODE_OP(last)==OP_BIF || DECODE_OP(last)==OP_BIFF) {
-        if (dest[0]!=old->end+1) {
-            _fixbrnch(comp, last, new->end, dest[0]);
-        } else {
+        if (n<2 && DECODE_sBx(last)!=0) UNREACHABLE("Couldn't fix branch instruction due to error in control flow graph");
+        if (n>1 && dest[0]==i+1) {
             _fixbrnch(comp, last, new->end, dest[1]);
+        } else {
+            _fixbrnch(comp, last, new->end, dest[0]);
         }
         
     } else if (DECODE_OP(last)==OP_PUSHERR) {
@@ -140,33 +132,44 @@ void blockcomposer_fixbranch(blockcomposer *comp, block *old, block *new) {
     }
 }
 
+/** Maps an instruction indx that starts a block in the original source to a new instruction */
+bool _mapblockostart(blockcomposer *comp, instructionindx old, instructionindx *new) {
+    bool success=false;
+    instructionindx blkindx;
+    block *dest;
+    if (cfgraph_findblockostart(comp->graph, old, &dest) && // Find block in old cfgraph
+        cfgraph_findindx(comp->graph, dest, &blkindx) && // Retrieve the index
+        cfgraph_indx(&comp->outgraph, blkindx, &dest)) { // Find the corresponding block in the new cfgraph
+        *new = dest->start;
+        success=true;
+    }
+    return success;
+}
+
 /** Fixes a branch table */
 void blockcomposer_fixbranchtable(blockcomposer *comp, dictionary *table) {
     for (int i=0; i<table->capacity; i++) {
         value key = table->contents[i].key;
         if (MORPHO_ISNIL(key)) continue;
         
-        indx old = MORPHO_GETINTEGERVALUE(table->contents[i].val);
+        instructionindx old = MORPHO_GETINTEGERVALUE(table->contents[i].val);
         instructionindx new;
         
-        if (blockcomposer_map(comp, old, &new)) {
+        if (_mapblockostart(comp, old, &new)) {
             dictionary_insert(table, key, MORPHO_INTEGER(new));
-        }
+        } else UNREACHABLE("Branch table entry not found.");
     }
 }
 
 /** Fixes the function corresponding */
-void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func) {
-    instructionindx entry;
-    if (blockcomposer_map(comp, func->entry, &entry)) func->entry=entry;
+void blockcomposer_fixfunction(blockcomposer *comp, objectfunction *func, instructionindx entry) {
+    func->entry=entry;
 }
 
 /** Processes a block by copying instructions from a source block  */
 void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     block out;
-    block_init(&out, blk->func);
-    
-    out.start=comp->out.count;
+    block_init(&out, blk->func, comp->out.count);
     
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = blockcomposer_getinstruction(comp, i);
@@ -179,7 +182,7 @@ void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     
     blockcomposer_addblock(comp, blk, &out);
     
-    if (block_isentry(blk)) blockcomposer_fixfunction(comp, blk->func);
+    if (block_isentry(blk)) blockcomposer_fixfunction(comp, blk->func, out.start);
 }
 
 /* **********************************************************************
@@ -195,19 +198,21 @@ void layout_sortcfgraph(optimizer *opt) {
 void layout_deleteunused(optimizer *opt) {
     varray_instruction *code = &opt->prog->code;
     
-    indx blkindx=0;
-    block *blk = &opt->graph.data[blkindx];
+    instructionindx last = 0;
     
-    // Loop over instructions
-    for (indx i=0; i<code->count; i++) {
-        if (i>blk->end) { // Check whether we need to move to the next block
-            blkindx++;
-            blk = &opt->graph.data[blkindx];
-        }
+    for (indx i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
         
-        // Check if this instruction is in the current block and if not delete it
-        if (!(i>=blk->start && i<=blk->end)) optimize_replaceinstructionat(opt, i, ENCODE_BYTE(OP_NOP));
+        // Erase any instructions before this block
+        for (instructionindx k=last; k<blk->start; k++) optimize_replaceinstructionat(opt, k, ENCODE_BYTE(OP_NOP));
+            
+        last = blk->end+1;
     }
+    
+    // Erase to end of program
+    for (instructionindx k=last; k<opt->prog->code.count; k++) optimize_replaceinstructionat(opt, k, ENCODE_BYTE(OP_NOP));
+    
+    varray_instructionwrite(&opt->prog->code, ENCODE_BYTE(OP_END));
 }
 
 /* **********************************************************************
@@ -326,9 +331,11 @@ void layout_consolidate(optimizer *opt) {
         blockcomposer_processblock(&comp, comp.graph->data+i);
     }
     
+    if (opt->verbose) cfgraph_show(&comp.outgraph);
+    
     // Fix branch instructions
     for (unsigned int i=0; i<comp.graph->count; i++) {
-        blockcomposer_fixbranch(&comp, comp.graph->data+i, comp.outgraph.data+i);
+        blockcomposer_fixbranch(&comp, i);
     }
     
     // Fix branch tables

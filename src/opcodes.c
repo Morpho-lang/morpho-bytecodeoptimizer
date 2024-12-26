@@ -82,12 +82,8 @@ void lgl_trackingfn(optimizer *opt) {
     registerindx rindx = DECODE_A(instr);
     optimize_write(opt, rindx, REG_GLOBAL, DECODE_Bx(instr));
     
-    globalinfolist *glist = optimize_globalinfolist(opt);
-    int gindx = DECODE_Bx(instr);
-    globalinfolist_read(glist, gindx, optimize_getinstructionindx(opt));
-    
     value type = MORPHO_NIL;
-    if (opt->pass>0) type=globalinfolist_type(glist, gindx); // We can only do this once the entire code has been seen at least once 
+    type=globalinfolist_type(optimize_globalinfolist(opt), DECODE_Bx(instr));
     optimize_settype(opt, rindx, type);
 }
 
@@ -108,7 +104,7 @@ void sgl_trackingfn(optimizer *opt) {
     } else globalinfolist_setvalue(glist, gindx);
     
     value type = optimize_type(opt, rindx);
-    globalinfolist_store(glist, gindx, optimize_getinstructionindx(opt), type);
+    globalinfolist_settype(glist, gindx, type);
 }
 
 void arith_trackingfn(optimizer *opt) {
@@ -142,24 +138,34 @@ void cmp_trackingfn(optimizer *opt) {
 
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    registerindx a = DECODE_A(instr), rout = a;
-    if (DECODE_OP(instr)==OP_INVOKE) rout+=1;
+    registerindx a = DECODE_A(instr);
     
     value type=MORPHO_NIL;
-    indx kindx;
-    if (optimize_isconstant(opt, a, &kindx)) {
-        value konst = optimize_getconstant(opt, kindx);
-        if (MORPHO_ISCLASS(konst)) {
-            type=konst;
-        } else if (MORPHO_ISFUNCTION(konst)) {
-            type=signature_getreturntype(&MORPHO_GETFUNCTION(konst)->sig);
-        } else if (MORPHO_ISBUILTINFUNCTION(konst)) {
-            type=signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(konst)->sig);
-        }
+    value content=MORPHO_NIL;
+    indx indx;
+    if (optimize_isconstant(opt, a, &indx)) {
+        content = optimize_getconstant(opt, indx);
+    } else if (optimize_isglobal(opt, a, &indx)) {
+        content = globalinfolist_type(optimize_globalinfolist(opt), (int) indx);
     }
     
-    optimize_writevalue(opt, rout);
-    if (!MORPHO_ISNIL(type)) optimize_settype(opt, rout, type);
+    if (MORPHO_ISCLASS(content)) {
+        type=content;
+    } else if (MORPHO_ISFUNCTION(content)) {
+        type=signature_getreturntype(&MORPHO_GETFUNCTION(content)->sig);
+    } else if (MORPHO_ISBUILTINFUNCTION(content)) {
+        type=signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(content)->sig);
+    }
+    
+    optimize_writevalue(opt, a);
+    if (!MORPHO_ISNIL(type)) optimize_settype(opt, a, type);
+}
+
+void invoke_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx a = DECODE_A(instr);
+    
+    optimize_writevalue(opt, a+1);
 }
 
 void lup_trackingfn(optimizer *opt) {
@@ -195,20 +201,6 @@ void cat_trackingfn(optimizer *opt) {
 }
 
 /* **********************************************************************
- * Opcode replacement functions
- * ********************************************************************** */
-
-void lgl_replacementfn(optimizer *opt) {
-    instruction instr = optimize_getinstruction(opt);
-    globalinfolist_removeread(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
-}
-
-void sgl_replacementfn(optimizer *opt) {
-    instruction instr = optimize_getinstruction(opt);
-    globalinfolist_removestore(optimize_globalinfolist(opt), DECODE_Bx(instr), optimize_getinstructionindx(opt));
-}
-
-/* **********************************************************************
  * Opcode definition table
  * ********************************************************************** */
 
@@ -240,14 +232,15 @@ opcodeinfo opcodetable[] = {
     { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_NEWBLOCKAFTER | OPCODE_USES_A, NULL, NULL, NULL },
     
     { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_OVERWRITES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn, NULL },
-    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, call_trackingfn, invoke_usagefn, NULL },
+    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, invoke_trackingfn, invoke_usagefn, NULL },
+    { OP_METHOD,  "method",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, invoke_trackingfn, invoke_usagefn, NULL },
     { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn, NULL },
     
     { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL, NULL },
     
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL, NULL },
-    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, lgl_replacementfn },
-    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, sgl_replacementfn },
+    { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, NULL },
+    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, NULL },
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lpr_trackingfn, NULL, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
@@ -288,6 +281,42 @@ opcodeusagefn opcode_getusagefn(instruction opcode) {
 opcodetrackingfn opcode_getreplacefn(instruction opcode) {
     if (opcode>nopcodes) return NULL;
     return opcodetable[opcode].replacefn;
+}
+
+/* **********************************************************************
+ * Track usage and overwrites
+ * ********************************************************************** */
+
+/** Facilitates instruction usage */
+void opcode_usageforinstruction(block *blk, instruction instr, usagecallbackfn usagefn, void *ref) {
+    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    
+    // Process usage
+    if (flags & OPCODE_USES_A) usagefn(DECODE_A(instr), ref);
+    if (flags & OPCODE_USES_B) usagefn(DECODE_B(instr), ref);
+    if (flags & OPCODE_USES_C) usagefn(DECODE_C(instr), ref);
+    
+    if (flags & OPCODE_USES_RANGEBC) {
+        for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) usagefn(i, ref);
+    }
+    
+    // A few opcodes have unusual usage and provide a tracking function
+    opcodeusagefn ufn=opcode_getusagefn(DECODE_OP(instr));
+    if (ufn) ufn(instr, blk, usagefn, ref);
+}
+
+bool opcode_overwritesforinstruction(instruction instr, registerindx *out) {
+    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    registerindx r = REGISTER_UNALLOCATED;
+    
+    if (flags & OPCODE_OVERWRITES_A) r=DECODE_A(instr);
+    if (flags & OPCODE_OVERWRITES_AP1) r=DECODE_A(instr)+1;
+    if (flags & OPCODE_OVERWRITES_B) r=DECODE_B(instr);
+    
+    bool overwrites = (r!=REGISTER_UNALLOCATED);
+    if (overwrites && out) *out = r;
+    
+    return overwrites;
 }
 
 /* **********************************************************************

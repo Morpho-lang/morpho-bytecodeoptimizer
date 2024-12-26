@@ -1,0 +1,33 @@
+// Method lookup
+
+import bytecodeoptimizer
+
+var N = 1000000 // Use 10x this in loop to minimize loop overhead 
+
+class Foo {
+  init(a) {
+    self.a = a 
+  }
+
+  report() {
+    return self.a 
+  }
+}
+
+fn f(Foo a) {
+  for (var i=0; i<N; i+=1) {
+    var b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+    b = a.report() 
+  }
+}
+
+var a = Foo(5)
+f(a) 

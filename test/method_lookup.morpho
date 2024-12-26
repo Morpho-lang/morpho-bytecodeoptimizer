@@ -1,0 +1,17 @@
+// Method lookup
+
+import bytecodeoptimizer
+
+class Foo {
+  init(a) {
+    self.a = a 
+  }
+
+  report() {
+    return self.a 
+  }
+}
+
+var a = Foo(5)
+
+print a.report() // expect: 5 

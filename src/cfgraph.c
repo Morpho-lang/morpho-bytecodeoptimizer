@@ -12,17 +12,17 @@ DEFINE_VARRAY(instructionindx, instructionindx)
 DEFINE_VARRAY(block, block)
 DEFINE_VARRAY(value, value)
 
-typedef unsigned int blockindx;
-
 /* **********************************************************************
  * Basic blocks
  * ********************************************************************** */
 
 /** Initializes a basic block structure */
-void block_init(block *b, objectfunction *func) {
-    b->start=INSTRUCTIONINDX_EMPTY;
+void block_init(block *b, objectfunction *func, instructionindx start) {
+    b->start=start;
+    b->ostart=start;
     b->end=INSTRUCTIONINDX_EMPTY;
     b->func=func;
+    b->isentry=false;
     
     reginfolist_init(&b->rout, func->nregs);
     
@@ -77,7 +77,7 @@ void _wipe(dictionary *dict) { // Wipe a dictionary
     for (int i=0; i<dict->capacity; i++) dict->contents[i].key=MORPHO_NIL;
 }
 
-void _usagefn(registerindx i, void *ref) { // Set usage
+static void _usagefn(registerindx i, void *ref) { // Set usage
     block *blk = (block *) ref;
     if (!block_writes(blk, i)) block_setuses(blk, i);
 }
@@ -91,23 +91,12 @@ void block_computeusage(block *blk, instruction *ilist) {
         instruction instr = ilist[i];
         opcodeflags flags = opcode_getflags(DECODE_OP(instr));
         
-        // Process usage 
-        if (flags & OPCODE_USES_A) _usagefn(DECODE_A(instr), blk);
-        if (flags & OPCODE_USES_B) _usagefn(DECODE_B(instr), blk);
-        if (flags & OPCODE_USES_C) _usagefn(DECODE_C(instr), blk);
+        opcode_usageforinstruction(blk, instr, _usagefn, blk);
         
-        if (flags & OPCODE_USES_RANGEBC) {
-            for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) _usagefn(i, blk);
+        registerindx roverwrite;
+        if (opcode_overwritesforinstruction(instr, &roverwrite)) {
+            block_setwrites(blk, roverwrite);
         }
-        
-        // A few opcodes have unusual usage and provide a tracking function
-        opcodeusagefn usagefn=opcode_getusagefn(DECODE_OP(instr));
-        if (usagefn) usagefn(instr, blk, _usagefn, blk);
-        
-        // Now process writes
-        if (flags & OPCODE_OVERWRITES_A) block_setwrites(blk, DECODE_A(instr));
-        if (flags & OPCODE_OVERWRITES_AP1) block_setwrites(blk, DECODE_A(instr)+1);
-        if (flags & OPCODE_OVERWRITES_B) block_setwrites(blk, DECODE_B(instr));
     }
 }
 
@@ -116,18 +105,18 @@ void block_computeusage(block *blk, instruction *ilist) {
  * ---------------------- */
 
 /** Sets source blocks */
-void block_setsource(block *b, instructionindx indx) {
+void block_setsource(block *b, blockindx indx) {
     dictionary_insert(&b->src, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /** Sets destination blocks */
-void block_setdest(block *b, instructionindx indx) {
+void block_setdest(block *b, blockindx indx) {
     dictionary_insert(&b->dest, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
 /** Determines of a block is the entry point of the function */
 bool block_isentry(block *b) {
-    return (b->func) && (b->func->entry == (indx) b->start);
+    return b->isentry;
 }
 
 /** Get a constant from a block */
@@ -189,11 +178,46 @@ void cfgraph_sort(cfgraph *graph) {
 }
 
 /** Find a block in a sorted cfgraph */
-bool cfgraph_findsrtd(cfgraph *graph, instructionindx start, block **out) {
+bool cfgraph_findblock(cfgraph *graph, instructionindx start, block **out) {
     block key = { .start = start };
     block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockcmp);
     if (out) *out=srch;
     return srch;
+}
+
+/** Find a block index in a sorted cfgraph */
+bool cfgraph_findblockindx(cfgraph *graph, instructionindx start, blockindx *out) {
+    block key = { .start = start };
+    block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockcmp);
+    if (out) *out = (blockindx) (srch - graph->data);
+    return srch;
+}
+
+int _blockostartcmp(const void *a, const void *b) {
+    block *aa = (block *) a;
+    block *bb = (block *) b;
+    return ((int) aa->ostart) - ((int) bb->ostart);
+}
+
+/** Find a block in a sorted cfgraph */
+bool cfgraph_findblockostart(cfgraph *graph, instructionindx start, block **out) {
+    block key = { .ostart = start };
+    block *srch = bsearch(&key, graph->data, graph->count, sizeof(block), _blockostartcmp);
+    if (out) *out=srch;
+    return srch;
+}
+
+/** Returns a block pointer from a blockindx  */
+bool cfgraph_indx(cfgraph *graph, blockindx bindx, block **out) {
+    if (bindx>=graph->count) return false;
+    *out = &graph->data[bindx];
+    return true;
+}
+
+/** Returns a block pointer from a blockindx  */
+bool cfgraph_findindx(cfgraph *graph, block *blk, blockindx *out) {
+    *out = (blockindx) (blk - graph->data);
+    return (*out < graph->count);
 }
 
 /* **********************************************************************
@@ -205,11 +229,11 @@ typedef struct {
     program *in;
     cfgraph *out;
     
-    dictionary blkindx; /** Dictionary of block indices */
-    varray_instructionindx worklist;
+    dictionary blkindx; /** Temporary dictionary of block indices */
+    varray_instructionindx worklist; /** Worklist of blocks to build */
     
     dictionary components; /** Dictionary of functions and metafunctions */
-    varray_value compontentworklist;
+    varray_value componentworklist;
     
     objectfunction *currentfn;
     
@@ -223,7 +247,7 @@ void cfgraphbuilder_init(cfgraphbuilder *bld, program *in, cfgraph *out, bool ve
     varray_instructionindxinit(&bld->worklist);
     dictionary_init(&bld->blkindx);
     dictionary_init(&bld->components);
-    varray_valueinit(&bld->compontentworklist);
+    varray_valueinit(&bld->componentworklist);
     bld->verbose=verbose;
 }
 
@@ -232,7 +256,7 @@ void cfgraphbuilder_clear(cfgraphbuilder *bld) {
     varray_instructionindxclear(&bld->worklist);
     dictionary_clear(&bld->blkindx);
     dictionary_clear(&bld->components);
-    varray_valueclear(&bld->compontentworklist);
+    varray_valueclear(&bld->componentworklist);
 }
 
 /** Adds a block to the worklist, also recording its presence in the blkindx dictionary */
@@ -276,7 +300,7 @@ bool cfgraphbuilder_checkblock(cfgraphbuilder *bld, indx start) {
 }
 
 /** Lookup a block indx from a given block index  */
-bool cfgraphbuilder_lookupblockindx(cfgraphbuilder *bld, indx start, indx *out) {
+bool _lookupblockindx(cfgraphbuilder *bld, instructionindx start, indx *out) {
     value val;
     
     if (!(dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), &val) &&
@@ -287,9 +311,9 @@ bool cfgraphbuilder_lookupblockindx(cfgraphbuilder *bld, indx start, indx *out) 
 }
 
 /** Lookup a block from the block index list */
-bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, indx start, block **out) {
+bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, instructionindx start, block **out) {
     indx bindx;
-    bool success=cfgraphbuilder_lookupblockindx(bld, start, &bindx);
+    bool success=_lookupblockindx(bld, start, &bindx);
     if (success) {
         if (out) *out = &bld->out->data[bindx];
     }
@@ -318,12 +342,12 @@ bool cfgraphbuilder_addblock(cfgraphbuilder *bld, block *blk) {
 /** Adds a component to the worklist if it has not already been processed */
 void cfgraphbuilder_pushcomponent(cfgraphbuilder *bld, value cmp) {
     if (dictionary_get(&bld->components, cmp, NULL)) return;
-    varray_valueadd(&bld->compontentworklist, &cmp, 1);
+    varray_valueadd(&bld->componentworklist, &cmp, 1);
 }
 
 /** Pops a component off the worklist */
 bool cfgraphbuilder_popcomponent(cfgraphbuilder *bld, value *cmp) {
-    return varray_valuepop(&bld->compontentworklist, cmp);
+    return varray_valuepop(&bld->componentworklist, cmp);
 }
 
 /* **********************************************************************
@@ -370,8 +394,9 @@ void cfgraphbuilder_branchtable(cfgraphbuilder *bld, indx kindx) {
 /** Creates a new basic block starting at a given instruction */
 void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     block blk;
-    block_init(&blk, cfgraphbuilder_currentfn(bld));
-    blk.start=start;
+    objectfunction *fn = cfgraphbuilder_currentfn(bld);
+    block_init(&blk, fn, start);
+    blk.isentry=(fn->entry==start);
     
     instructionindx i;
     for (i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
@@ -403,32 +428,6 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     blk.end=i; // Record end point
         
     cfgraphbuilder_addblock(bld, &blk);
-}
-
-/** Finds the destination block dest and add src to its source list */
-void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx src, instructionindx dest) {
-    block *blk;
-    if (cfgraphbuilder_lookupblock(bld, dest, &blk)) block_setsource(blk, src);
-}
-
-/** Determines the destination blocks for a given block  */
-void cfgraphbuilder_blockdest(cfgraphbuilder *bld, block *blk) {
-    instruction instr = cfgraphbuilder_fetch(bld, blk->end); // Only need to look at last instruction
-    instruction op = DECODE_OP(instr);
-    opcodeflags flags = opcode_getflags(op);
-    
-    if (flags & OPCODE_TERMINATING) return; // Terminal blocks have no destination
-    
-    if (flags & OPCODE_BRANCH) {
-        instructionindx dest = blk->end+1+DECODE_sBx(instr);
-        block_setdest(blk, dest);
-        cfgraphbuilder_setsrc(bld, blk->start, dest);
-        
-        if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
-    }
-    
-    block_setdest(blk, blk->end+1); // Link to following block
-    cfgraphbuilder_setsrc(bld, blk->start, blk->end+1);
 }
 
 /* **********************************************************************
@@ -489,6 +488,53 @@ void cfgraphbuilder_processcomponent(cfgraphbuilder *bld, value comp) {
 }
 
 /* **********************************************************************
+ * Set source and destinations
+ * ********************************************************************** */
+
+/** Finds the destination block dest and add src to its source list */
+void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx dest, blockindx src) {
+    block *blk;
+    if (cfgraph_findblock(bld->out, dest, &blk)) block_setsource(blk, src);
+}
+
+/** Determines the destination blocks for a given block  */
+void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
+    block *blk = &bld->out->data[blkindx];
+    instruction instr = cfgraphbuilder_fetch(bld, blk->end); // Only need to look at last instruction
+    blockindx bindx;
+    instruction op = DECODE_OP(instr);
+    opcodeflags flags = opcode_getflags(op);
+    
+    if (flags & OPCODE_TERMINATING) return; // Terminal blocks have no destination
+    
+    if (flags & OPCODE_BRANCH) {
+        instructionindx dest = blk->end+1+DECODE_sBx(instr);
+        if (cfgraph_findblockindx(bld->out, dest, &bindx)) block_setdest(blk, bindx);
+        
+        cfgraphbuilder_setsrc(bld, dest, blkindx);
+        
+        if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
+    }
+    
+    // Link to following block
+    if (cfgraph_findblockindx(bld->out, blk->end+1, &bindx)) block_setdest(blk, bindx);
+    
+    cfgraphbuilder_setsrc(bld, blk->end+1, blkindx);
+}
+
+void cfgraphbuilder_identifysources(cfgraphbuilder *bld) {
+    // Sort the blocks by start index and clear the intermediate blkindex data structure
+    dictionary_clear(&bld->blkindx);
+    cfgraph_sort(bld->out);
+    
+    // Identify sources and destinations for each code block
+    for (blockindx i=0; i<bld->out->count; i++) {
+        block_computeusage(&bld->out->data[i], bld->in->code.data);
+        cfgraphbuilder_blockdest(bld, i);
+    }
+}
+
+/* **********************************************************************
  * Build control flow graph
  * ********************************************************************** */
 
@@ -511,15 +557,9 @@ void cfgraph_build(program *in, cfgraph *out, bool verbose) {
         }
     }
     
-    // Identify sources and destinations for each code block
-    for (int i=0; i<out->count; i++) {
-        block_computeusage(&out->data[i], bld.in->code.data);
-        cfgraphbuilder_blockdest(&bld, &out->data[i]);
-    }
+    cfgraphbuilder_identifysources(&bld);
     
     cfgraphbuilder_clear(&bld);
-    
-    cfgraph_sort(out);
     
     if (bld.verbose) cfgraph_show(out);
 }

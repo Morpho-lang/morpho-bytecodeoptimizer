@@ -135,7 +135,7 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
             reginfolist_write(rlist, src, i, srccontents, srcindx);
             if (!MORPHO_ISNIL(srctype)) reginfolist_settype(rlist, i, srctype);
             
-            // Usage count should be copied from src register
+            // Preserve usage count
             int nused = reginfolist_countuses(rlist, rindx);
             rlist->rinfo[i].nused=nused;
         }

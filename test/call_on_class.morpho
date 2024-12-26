@@ -1,0 +1,13 @@
+// Call on a class 
+
+import bytecodeoptimizer
+
+class Foo {
+  prnt() {
+    print "Hello"
+  }
+}
+
+Foo.prnt() // expect: Hello
+
+System.prnt("Foo\n") // expect: Foo

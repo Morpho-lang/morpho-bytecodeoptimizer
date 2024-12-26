@@ -28,6 +28,8 @@ typedef unsigned int opcodeflags;
 #define OPCODE_SIDEEFFECTS      (1<<12)
 #define OPCODE_UNSUPPORTED      (1<<13)
 
+#define OP_INSERT           (OP_END+1)
+
 /* **********************************************************************
  * Interface
  * ********************************************************************** */
@@ -36,6 +38,9 @@ opcodeflags opcode_getflags(instruction opcode);
 opcodetrackingfn opcode_gettrackingfn(instruction opcode);
 opcodeusagefn opcode_getusagefn(instruction opcode);
 opcodetrackingfn opcode_getreplacefn(instruction opcode);
+
+void opcode_usageforinstruction(block *blk, instruction instr, usagecallbackfn usagefn, void *ref);
+bool opcode_overwritesforinstruction(instruction instr, registerindx *out);
 
 void opcode_initialize(void);
 

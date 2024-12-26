@@ -1,33 +1,25 @@
 # Simple automated benchmarking
-# T J Atherton Mar 2021
+# T J Atherton Mar 2021-4
+# 
+# Command line switches
+# -f path - Uses an external folder of tests, which are copied in place and modified for use with the bytecodeoptimizer
+# -t      - Cleanup copied files
 
 # import necessary modules
-import os, glob
+import os, glob, sys
 import re
 import colored
 from colored import stylize
 import subprocess
 
 """
-languages = { "morpho6": "morpho6 -O",
-              "morpho6": "morpho6",
-              "fe": "evolver",
-              "lua": "lua",
-              "wren": "wren",
-              "lox": "clox",
-              "py": "python3",
-              "rb": "ruby",
-              "dart": "dart"
-            }
-"""
-
-"""
 Dictionary of languages as keys mapping to corresponding extension
 """
 languages = { "morpho6 -O" : "morpho",
-              "morpho6" : "morpho",
-              "python3" : "py" }
+              "morpho6" : "morpho", }
 samples = 10
+
+prepend = False 
 
 # Gets the output generated
 def getoutput(filepath):
@@ -43,7 +35,7 @@ def getoutput(filepath):
     return -1
 
 # Runs a given command with a file and return the time in s.
-def run(command, file):
+def run(command, file, param):
     out = -1
 
     print(command + ' ' + file)
@@ -51,7 +43,7 @@ def run(command, file):
     tmp = file + '.out'
 
     # Run the test
-    exec = '( /usr/bin/time ' + command + ' ' + file + ' 1> /dev/null ) 2> ' + tmp
+    exec = '( /usr/bin/time ' + command + ' ' + file + ' ' + param + ' 1> /dev/null ) 2> ' + tmp
     os.system(exec)
 
     # If we produced output
@@ -63,6 +55,25 @@ def run(command, file):
 
     return out
 
+def findParam(file):
+    directory = file if os.path.isdir(file) else os.path.dirname(file)
+    in_file_path = os.path.join(directory, 'in.txt')
+
+    if os.path.exists(in_file_path):
+        with open(in_file_path, 'r') as f:
+            return f.read()
+
+    return ''
+
+def doRun(command, file):
+    if (prepend):
+        # Prepend the bytecodeoptimizer import
+        os.system("sed -i.old '1s;^;import bytecodeoptimizer\\n;' " + file)
+
+    param = findParam(file)
+
+    return run(command, file, param)
+
 # Perform a benchmark
 def benchmark(folder):
     dict = {};
@@ -72,7 +83,7 @@ def benchmark(folder):
         if (len(test)>0):
             time = []
             for i in range(1,samples):
-                time.append(run(lang, test[0]))
+                time.append(doRun(lang, test[0]))
             dict[lang]=min(time)
     return dict
 
@@ -81,7 +92,22 @@ print('--Begin testing---------------------')
 success=0 # number of successful tests
 total=0   # total number of tests
 
-benchmarks=glob.glob('**/', recursive=False)
+TIDY=False 
+base = ''
+
+for ix, arg in enumerate(sys.argv):
+    if arg == '-f':
+        base = sys.argv[ix+1]
+    if arg == '-t':
+        TIDY = True
+
+if (base!=''):
+    os.system('mkdir -p tests')
+    os.system('cp -r '+base+'/* ./tests/')
+    base = 'tests/'
+    prepend=True
+
+benchmarks=glob.glob(base + '**/', recursive=True)
 
 out = []
 
@@ -106,3 +132,7 @@ for i, results in enumerate(out):
 
 
 print('--End testing-----------------------')
+
+# Cleanup the test files 
+if TIDY:
+    os.system('rm -r tests')

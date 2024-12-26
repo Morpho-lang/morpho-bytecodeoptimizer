@@ -28,6 +28,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
+    varray_instructioninit(&opt->insertions);
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
@@ -45,6 +46,7 @@ void optimize_clear(optimizer *opt) {
     cfgraph_clear(&opt->graph);
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
+    varray_instructionclear(&opt->insertions);
     
     if (opt->v) morpho_freevm(opt->v);
     if (opt->temp) morpho_freeprogram(opt->temp);
@@ -146,6 +148,18 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
 }
 
 /** Checks if a register holds another register */
+bool optimize_isglobal(optimizer *opt, registerindx i, indx *out) {
+    regcontents contents=REG_EMPTY;
+    indx ix;
+    if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
+    
+    bool success=(contents==REG_GLOBAL);
+    if (success && out) *out = ix;
+    
+    return success;
+}
+
+/** Checks if a register holds another register */
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *out) {
     regcontents contents=REG_EMPTY;
     indx ix;
@@ -166,12 +180,41 @@ bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, in
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {
         instruction instr = optimize_getinstructionat(opt, i);
-        opcodeflags flags=opcode_getflags(instr);
-        if ( ((flags & OPCODE_OVERWRITES_A) && (DECODE_A(instr)==rindx)) ||
-            ((flags & OPCODE_OVERWRITES_B) && (DECODE_B(instr)==rindx)) ) return true;
+        registerindx overwrites;
+        if (opcode_overwritesforinstruction(instr, &overwrites) &&
+            overwrites==rindx) {
+            return true;
+        }
     }
     
     return false;
+}
+
+typedef struct {
+    registerindx r;
+    bool isused;
+} _usedstruct;
+
+static void _usagefn(registerindx i, void *ref) { // Set usage
+    _usedstruct *s = (_usedstruct *) ref;
+    if (i==s->r) s->isused=true;
+}
+
+/** Checks if a register is used between the instruction after the current one and the end of the block OR an instruction that overwrites it */
+bool optimize_isused(optimizer *opt, registerindx rindx) {
+    for (instructionindx i=opt->pc+1; i<=opt->currentblk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        
+        _usedstruct s = { .r = rindx, .isused = false };
+        opcode_usageforinstruction(opt->currentblk, instr, _usagefn, &s);
+        if (s.isused) return true;
+        
+        registerindx overwrites;
+        if (opcode_overwritesforinstruction(instr, &overwrites) &&
+            overwrites==rindx) return false;
+    }
+    
+    return optimize_checkdestusage(opt, opt->currentblk, rindx);
 }
 
 /** Trace back through duplicate registers */
@@ -227,14 +270,24 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr) {
     if (opt->verbose) optimize_disassemble(opt);
 }
 
-/** Callback function to get the current instruction */
+/** Replaces an instruction at a given index */
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr) {
     instruction oinstr = opt->prog->code.data[i];
     
-    opcodetrackingfn replacefn=opcode_getreplacefn(DECODE_OP(oinstr));
-    if (replacefn) replacefn(opt);
+    //opcodetrackingfn replacefn=opcode_getreplacefn(DECODE_OP(oinstr));
+    //if (replacefn) replacefn(opt);
     
     opt->prog->code.data[i]=instr;
+    opt->nchanged++;
+}
+
+/** Inserts a sequence of instructions at a given index, replacing the current instruction there */
+void optimize_insertinstructions(optimizer *opt, int n, instruction *instr) {
+    instructionindx start = opt->insertions.count;
+    varray_instructionadd(&opt->insertions, instr, n);
+    varray_instructionwrite(&opt->insertions, ENCODE_BYTE(OP_END));
+    
+    optimize_replaceinstruction(opt, ENCODE_LONG(OP_INSERT, n, start));
     opt->nchanged++;
 }
 
@@ -260,6 +313,8 @@ bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value kons
     Returns true if the instruction was deleted */
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     instruction instr = optimize_getinstructionat(opt, indx);
+    if (DECODE_OP(instr)==OP_INSERT) return false; // Instruction to be deleted was an insertion point
+    
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
     // Check for side effects
@@ -280,20 +335,59 @@ void _optusagefn(registerindx r, void *ref) {
     reginfolist_uses(rinfo, r);
 }
 
+/** Updates reginfo usage information for an insertion */
+void optimize_usageforinsertion(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    int n=DECODE_A(instr);
+    instructionindx start=DECODE_Bx(instr);
+    
+    for (int i=0; i<n; i++) {
+        instr = opt->insertions.data[start+i];
+        opcode_usageforinstruction(opt->currentblk, instr, _optusagefn, &opt->rlist);
+    }
+}
+
 /** Updates reginfo usage information based on the opcode */
 void optimize_usage(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+    if (DECODE_OP(instr)!=OP_INSERT) {
+        opcode_usageforinstruction(opt->currentblk, instr, _optusagefn, &opt->rlist);
+    } else optimize_usageforinsertion(opt);
+}
+
+/** Updates reginfo tracking information for an insertion */
+void optimize_trackforinsertion(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    int n=DECODE_A(instr);
+    instructionindx start=DECODE_Bx(instr);
     
-    if (flags & OPCODE_USES_A) reginfolist_uses(&opt->rlist, DECODE_A(instr));
-    if (flags & OPCODE_USES_B) reginfolist_uses(&opt->rlist, DECODE_B(instr));
-    if (flags & OPCODE_USES_C) reginfolist_uses(&opt->rlist, DECODE_C(instr));
-    if (flags & OPCODE_USES_RANGEBC) {
-        for (int i=DECODE_B(instr); i<=DECODE_C(instr); i++) reginfolist_uses(&opt->rlist, i);
+    for (int i=0; i<n; i++) {
+        instruction iinstr = opt->insertions.data[start+i];
+        opt->current=iinstr; // Patch in the inserted instruction so that the tracking fn gets it
+        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(iinstr));
+        if (trackingfn) trackingfn(opt);
     }
     
-    opcodeusagefn usagefn = opcode_getusagefn(DECODE_OP(instr));
-    if (usagefn) usagefn(instr, opt->currentblk, _optusagefn, &opt->rlist);
+    opt->current=instr; // Restore current instruction
+}
+
+/** Tracks register content for the current instruction */
+void optimize_track(optimizer *opt) {
+    instruction op=DECODE_OP(opt->current);
+    if (op!=OP_INSERT) {
+        opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
+        if (trackingfn) trackingfn(opt);
+    } else {
+        optimize_trackforinsertion(opt);
+    }
+}
+
+/** Checks if a block contains any insertions*/
+bool optimize_hasinsertions(optimizer *opt, block *blk) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        if (DECODE_OP(optimize_getinstructionat(opt, i))==OP_INSERT) return true;
+    }
+    return false;
 }
 
 /** Disassembles the current instruction */
@@ -304,7 +398,10 @@ void optimize_disassemble(optimizer *opt) {
 }
 
 bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary *checked) {
-    dictionary_insert(checked, MORPHO_INTEGER(blk->start), MORPHO_NIL); // Mark this dictionary as checked
+    blockindx blkindx;
+    if (!cfgraph_findindx(&opt->graph, blk, &blkindx)) return false;
+    
+    dictionary_insert(checked, MORPHO_INTEGER(blkindx), MORPHO_NIL); // Mark this dictionary as checked
     
     for (int i=0; i<blk->dest.capacity; i++) {
         value key = blk->dest.contents[i].key;
@@ -312,7 +409,8 @@ bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary 
         
         if (MORPHO_ISINTEGER(key) &&
             !dictionary_get(checked, key, NULL) && // Ensure the block hasn't been checked
-            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
+            cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest)) {
+            
             if (block_uses(dest, rindx)) return true;
             
             if (!block_writes(dest, rindx) &&
@@ -358,6 +456,78 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     }
 }
 
+int optimize_countinsertions(optimizer *opt, block *blk) {
+    int n=0;
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        if (DECODE_OP(instr)==OP_INSERT) n+=DECODE_A(instr)-1; // Less one to account for the OP_INSERT instruction
+    }
+    return n;
+}
+
+void _fixannotation(optimizer *opt, instructionindx iindx, int ninsert) {
+    varray_debugannotation *alist = &opt->prog->annotations;
+    instructionindx i=0;
+    
+    for (unsigned int j=0; j<alist->count; j++) {
+        debugannotation *ann = &alist->data[j];
+        if (ann->type!=DEBUG_ELEMENT) continue;
+            
+        if (iindx>=i && iindx<i+ann->content.element.ninstr) {
+            ann->content.element.ninstr+=ninsert;
+            return;
+        } else i+=ann->content.element.ninstr;
+    }
+}
+
+/** Rebuilds a block inserting inserted code */
+bool optimize_processinsertions(optimizer *opt, block *blk) {
+    varray_instruction *code = &opt->prog->code;
+    
+    int ninsert = optimize_countinsertions(opt, blk);
+    
+    if (!varray_instructionresize(code, ninsert)) return false;
+    
+    // Move instructions after the block end
+    instructionindx nmove = code->count - (blk->end+1);
+    if (nmove) memmove(&code->data[blk->end+1+ninsert], &code->data[blk->end+1], sizeof(instruction)*nmove);
+    
+    instructionindx k=blk->end+ninsert; // Destination index
+    // Loop backwards over block copying in insertions
+    for (instructionindx i=blk->end; i>=blk->start; i--, k--) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        if (DECODE_OP(instr)==OP_INSERT) {
+            int n=DECODE_A(instr);
+            k-=(n-1);
+            memcpy(code->data+k, opt->insertions.data+DECODE_Bx(instr), n*sizeof(instruction));
+            _fixannotation(opt, i, n-1);
+        } else {
+            code->data[k]=code->data[i];
+        }
+    }
+    
+    code->count+=ninsert;
+    blk->end+=ninsert;
+    opt->insertions.count=0; // Clear insertions
+    
+    // Fix starting and ending indices for subsequent blocks
+    for (int i=0; i<opt->graph.count; i++) {
+        block *b = &opt->graph.data[i];
+        if (b->start>blk->start) { b->start+=ninsert; b->end+=ninsert; } 
+    }
+    
+    if (opt->verbose) {
+        printf("Expanded block [%ti - %ti]\n", blk->start, blk->end);
+        for (instructionindx i=blk->start; i<=blk->end; i++) {
+            instruction instr = optimize_getinstructionat(opt, i);
+            debugger_disassembleinstruction(NULL, instr, i, NULL, NULL);
+            printf("\n");
+        }
+    }
+    
+    return true;
+}
+
 /** Sets the contents of registers from knowledge of the function signature */
 void optimize_signature(optimizer *opt) {
     objectfunction *func = optimize_currentblock(opt)->func;
@@ -371,6 +541,7 @@ void optimize_signature(optimizer *opt) {
     }
 }
 
+/* Todo: Remove dead function v */
 void _copy(reginfolist *src, reginfolist *dest) {
     for (int i=0; i<src->nreg; i++) {
         if (dest->rinfo[i].contents==REG_EMPTY) { // If empty, just copy across the info from src
@@ -455,8 +626,7 @@ void optimize_restorestate(optimizer *opt, block *blk) {
             value key = blk->src.contents[i].key;
             if (MORPHO_ISNIL(key)) continue;
             
-            cfgraph_findsrtd(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k]);
-            if (!srcblk[k]) return;
+            if (!cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k])) return;
             
             if (opt->verbose) {
                 printf("Restoring from block %ti\n", srcblk[k]->start);
@@ -506,13 +676,14 @@ bool optimize_block(optimizer *opt, block *blk) {
             if (optimize_checkerror(opt)) return false;
             
             // Perform tracking to track register contents from the optimized instruction
-            opcodetrackingfn trackingfn = opcode_gettrackingfn(DECODE_OP(opt->current));
-            if (trackingfn) trackingfn(opt);
+            optimize_track(opt);
             
             if (opt->verbose) reginfolist_show(&opt->rlist);
         }
         
-        optimize_dead_store_elimination(opt, blk);
+        if (optimize_hasinsertions(opt, blk)) {
+            optimize_processinsertions(opt, blk);
+        } else optimize_dead_store_elimination(opt, blk);
     } while (opt->nchanged>0);
     
     // Finalize block information
@@ -522,9 +693,33 @@ bool optimize_block(optimizer *opt, block *blk) {
     return true;
 }
 
+/* **********************************************************************
+ * Optimization passes
+ * ********************************************************************** */
+
+/** Computes the usage of globals from a block by looping over and analyzing instructions */
+void optimize_globalusageforblock(optimizer *opt, block *blk) {
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        instruction op=DECODE_OP(instr);
+        if (op==OP_LGL) globalinfolist_read(&opt->glist, DECODE_Bx(instr));
+        else if (op==OP_SGL) globalinfolist_store(&opt->glist, DECODE_Bx(instr));
+    }
+}
+
+/** Computes usage of global variables */
+void optimize_globalusage(optimizer *opt) {
+    globalinfolist_startpass(&opt->glist);
+    for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
+        optimize_globalusageforblock(opt, &opt->graph.data[i]);
+    }
+}
+
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
-    opt->pass=n; 
+    optimize_globalusage(opt);
+    
+    opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) optimize_block(opt, &opt->graph.data[i]);
 }
@@ -556,8 +751,6 @@ bool optimize(program *in) {
         layout(&opt);
     }
     
-    if (opt.verbose) morpho_disassemble(NULL, in, NULL);
-    
     optimize_clear(&opt);
     return true;
 }
@@ -566,7 +759,7 @@ bool optimize(program *in) {
  * Initialization/Finalization
  * ********************************************************************** */
 
-value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
+value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -595,6 +788,9 @@ void bytecodeoptimizer_initialize(void) {
     
     objectstring tuplelabel = MORPHO_STATICSTRING(TUPLE_CLASSNAME);
     typetuple = builtin_findclass(MORPHO_OBJECT(&tuplelabel));
+    
+    objectstring classlabel = MORPHO_STATICSTRING(CLASS_CLASSNAME);
+    typeclass = builtin_findclass(MORPHO_OBJECT(&classlabel));
 }
 
 void bytecodeoptimizer_finalize(void) {

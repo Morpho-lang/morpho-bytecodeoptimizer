@@ -35,6 +35,8 @@ typedef struct {
     instruction current;
     int nchanged; /** Number of instructions changed in this pass */
     
+    varray_instruction insertions;
+    
     vm *v; /** VM to execute subprograms */
     program *temp; /** Temporary program structure */
     
@@ -50,7 +52,7 @@ typedef void (*usagecallbackfn) (registerindx r, void *ref);
 /** Function that can be called by the optimizer to track register usage */
 typedef void (*opcodeusagefn) (instruction instr, block *blk, usagecallbackfn usefn, void *ref);
 
-extern value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple;
+extern value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass;
 
 /* **********************************************************************
  * Interface for optimization strategies
@@ -70,6 +72,7 @@ bool optimize_addconstant(optimizer *opt, value val, indx *indx);
 
 bool optimize_isempty(optimizer *opt, registerindx i);
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
+bool optimize_isglobal(optimizer *opt, registerindx i, indx *indx);
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *indx);
 bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, indx *indx);
 
@@ -89,11 +92,15 @@ block *optimize_currentblock(optimizer *opt);
 void optimize_replaceinstruction(optimizer *opt, instruction instr);
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr);
 bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst);
+void optimize_insertinstructions(optimizer *opt, int n, instruction *instr);
 
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 
 globalinfolist *optimize_globalinfolist(optimizer *opt);
 
 void optimize_disassemble(optimizer *opt);
+
+bool optimize_isused(optimizer *opt, registerindx rindx);
+bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 
 #endif
