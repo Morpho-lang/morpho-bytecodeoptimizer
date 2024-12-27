@@ -19,9 +19,11 @@ Some optimizations on these are possible, but require the optimizer to check for
 
 * Fused branch and test instructions?
 
-* Improve type inference across blocks
+* Improve type inference across blocks.
 
-* Function call parameter type inference
+* Function call parameter type inference.
+
+* Return value inference. [Need to provide signatures for builtin functions too].
 
 * Compact instruction format with reduced registers? Could squeeze 4 six-bit args rather than 3 8-bit args.
 
@@ -29,8 +31,9 @@ Some optimizations on these are possible, but require the optimizer to check for
 
     -> This would save a lot of mov instructions to get arguments into correct place. [Ising energy function]
 
-* Should set type of r0 to be the method's class if the class isn't subclassed; this would enable method resolution
-[deltablue]
+* Avoid use of temporary objects. Could a stack based allocator help?
+
+* Replace mov of a shadowed register with the original register.
 
 ## Outstanding bugs
 
@@ -42,7 +45,11 @@ Some optimizations on these are possible, but require the optimizer to check for
                         morpho6 -O morpho6 
     tests/Ising         0.28     0.29    
     tests/Fibonacci     0.23     0.24    
-    tests/DeltaBlue     0.24     0.23    
+    tests/DeltaBlue     0.24     0.23  
+
+    tests/Ising         0.27     0.28    
+    tests/Fibonacci     0.22     0.22    
+    tests/DeltaBlue     0.19     0.21      
 
     language: 
                     morpho6 -O morpho6 
@@ -62,6 +69,12 @@ Some optimizations on these are possible, but require the optimizer to check for
     tests/MeshGen       0.67     0.65    
     tests/Adhesion      2.5      2.41 
 
+    tests/RelaxCube     0.04     0.09    
+    tests/Tactoid       0.68     0.72    
+    tests/ImplicitMesh  0.78     0.83    
+    tests/MeshGen       0.55     0.53    
+    tests/Adhesion      1.98     2.03    
+
     clbg: 
                         morpho6 -O morpho6 
     tests/BinaryTrees   1.95     1.95    
@@ -72,6 +85,14 @@ Some optimizations on these are possible, but require the optimizer to check for
     tests/SpectralNorm  1.71     1.74    
     tests/Fannkuch      1.75     1.77    
 
+    tests/BinaryTrees   1.55     1.52    
+    tests/NBody         1.46     1.58    
+    tests/TooSimple     0.57     0.59    
+    tests/Mandelbrot    1.02     1.1     
+    tests/Fasta         0.75     0.77    
+    tests/SpectralNorm  1.46     1.49    
+    tests/Fannkuch      1.47     1.47    
+
     bytecodeoptimizer:
                         morpho6 -O morpho6 
     Pow                 0.98     1.97    
@@ -80,3 +101,10 @@ Some optimizations on these are possible, but require the optimizer to check for
     Filament            2.85     3.23    
     ListLookup          0.47     1.36    
     MethodLookup        0.44     0.58    
+
+    Pow                 0.72     1.47    
+    ForIn               0.75     0.89    
+    Fannkuch            2.19     3.29    
+    Filament            2.42     2.84    
+    ListLookup          0.4      1.2     
+    MethodLookup        0.39     0.5     
