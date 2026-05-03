@@ -276,7 +276,8 @@ bool strategy_constant_global(optimizer *opt) {
     bool success=false;
     
     globalinfolist *glist = optimize_globalinfolist(opt);
-    if (globalinfolist_isconstant(glist, DECODE_Bx(instr), &konst)) {
+    if (globalinfolist_countstore(glist, DECODE_Bx(instr))==1 &&
+        globalinfolist_isconstant(glist, DECODE_Bx(instr), &konst)) {
         optimize_replacewithloadconstant(opt, DECODE_A(instr), konst);
         success=true;
     }
