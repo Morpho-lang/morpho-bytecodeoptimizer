@@ -379,8 +379,8 @@ bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
-    // Check for side effects
-    if (flags & OPCODE_SIDEEFFECTS) return false; // Todo: Check whether an instruction with potential side effects could still be safe.
+    // Check for instructions that generic dead-code elimination must not erase.
+    if (flags & OPCODE_NODELETE) return false; // Todo: Check whether some protected instructions could still be safe.
     
     optimize_replaceinstructionat(opt, indx, ENCODE_BYTE(OP_NOP));
     return true;

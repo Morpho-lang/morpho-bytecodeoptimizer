@@ -25,7 +25,7 @@ typedef unsigned int opcodeflags;
 #define OPCODE_NEWBLOCKAFTER    (1<<9)
 #define OPCODE_BRANCH_TABLE     (1<<10)
 #define OPCODE_TERMINATING      (1<<11)
-#define OPCODE_SIDEEFFECTS      (1<<12)
+#define OPCODE_NODELETE         (1<<12) /* Generic dead-code elimination must not erase this opcode. */
 #define OPCODE_UNSUPPORTED      (1<<13)
 
 #define OP_INSERT           (OP_END+1)

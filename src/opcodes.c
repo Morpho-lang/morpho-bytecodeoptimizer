@@ -231,29 +231,29 @@ opcodeinfo opcodetable[] = {
     { OP_BIF,  "bif",  OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_NEWBLOCKAFTER | OPCODE_USES_A, NULL, NULL, NULL },
     { OP_BIFF, "biff", OPCODE_ENDSBLOCK | OPCODE_BRANCH | OPCODE_NEWBLOCKAFTER | OPCODE_USES_A, NULL, NULL, NULL },
     
-    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_OVERWRITES_A | OPCODE_SIDEEFFECTS, call_trackingfn, call_usagefn, NULL },
-    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, invoke_trackingfn, invoke_usagefn, NULL },
-    { OP_METHOD,  "method",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_SIDEEFFECTS, invoke_trackingfn, invoke_usagefn, NULL },
+    { OP_CALL,    "call",    OPCODE_USES_A | OPCODE_OVERWRITES_A | OPCODE_NODELETE, call_trackingfn, call_usagefn, NULL },
+    { OP_INVOKE,  "invoke",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_NODELETE, invoke_trackingfn, invoke_usagefn, NULL },
+    { OP_METHOD,  "method",  OPCODE_USES_A | OPCODE_OVERWRITES_AP1 | OPCODE_NODELETE, invoke_trackingfn, invoke_usagefn, NULL },
     { OP_RETURN,  "return",  OPCODE_ENDSBLOCK | OPCODE_TERMINATING, NULL, return_usagefn, NULL },
     
-    { OP_CLOSEUP, "closeup", OPCODE_BLANK, NULL, NULL, NULL },
+    { OP_CLOSEUP, "closeup", OPCODE_NODELETE, NULL, NULL, NULL },
     
     { OP_LCT, "lct", OPCODE_OVERWRITES_A, lct_trackingfn, NULL, NULL },
     { OP_LGL, "lgl", OPCODE_OVERWRITES_A, lgl_trackingfn, NULL, NULL },
-    { OP_SGL, "sgl", OPCODE_USES_A, sgl_trackingfn, NULL, NULL },
-    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lpr_trackingfn, NULL, NULL },
-    { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C, NULL, NULL, NULL },
+    { OP_SGL, "sgl", OPCODE_USES_A | OPCODE_NODELETE, sgl_trackingfn, NULL, NULL },
+    { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, lpr_trackingfn, NULL, NULL },
+    { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
-    { OP_SUP, "sup", OPCODE_USES_B, NULL, NULL, NULL },
-    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_SIDEEFFECTS, lix_trackingfn, NULL, NULL },
-    { OP_LIXL, "lixl", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_SIDEEFFECTS, lixl_trackingfn, NULL, NULL },
-    { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC, NULL, NULL, NULL },
+    { OP_SUP, "sup", OPCODE_USES_B | OPCODE_NODELETE, NULL, NULL, NULL },
+    { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_NODELETE, lix_trackingfn, NULL, NULL },
+    { OP_LIXL, "lixl", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, lixl_trackingfn, NULL, NULL },
+    { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_NODELETE, NULL, NULL, NULL },
     
-    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A | OPCODE_SIDEEFFECTS, closure_trackingfn, closure_usagefn, NULL },
+    { OP_CLOSURE, "closure", OPCODE_OVERWRITES_A | OPCODE_USES_A | OPCODE_NODELETE, closure_trackingfn, closure_usagefn, NULL },
     
-    { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL, NULL },
+    { OP_PRINT, "print", OPCODE_USES_A | OPCODE_NODELETE, NULL, NULL, NULL },
     
-    { OP_TYPECHECK, "typecheck", OPCODE_USES_A, NULL, NULL, NULL },
+    { OP_TYPECHECK, "typecheck", OPCODE_USES_A | OPCODE_NODELETE, NULL, NULL, NULL },
     
     { OP_BREAK, "break", OPCODE_BLANK, NULL, NULL, NULL },
     
@@ -340,4 +340,3 @@ void opcode_initialize(void) {
     
     if (opcodetable[nopcodes].code!=nopcodes) UNREACHABLE("Error in opcode definition table.");
 }
-
