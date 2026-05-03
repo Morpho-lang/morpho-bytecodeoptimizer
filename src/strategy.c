@@ -207,7 +207,8 @@ bool strategy_dead_store_elimination(optimizer *opt) {
  * Constant Immutable Constructor
  * ------------------------------------- */
 
-bool _isimmutable(value v) {
+// Restrict constructor folding to a small trusted set of pure builtin result types.
+bool _isfoldsafeconstructortype(value v) {
     return (MORPHO_ISEQUAL(v, typebool) ||
             MORPHO_ISEQUAL(v, typerange) ||
             MORPHO_ISEQUAL(v, typestring) ||
@@ -236,9 +237,9 @@ bool strategy_constant_immutable(optimizer *opt) {
     CHECK(MORPHO_ISBUILTINFUNCTION(fn) &&
           (MORPHO_GETBUILTINFUNCTION(fn)->flags & MORPHO_FN_CONSTRUCTOR));
     
-    // Todo: Need a better check for immutability!
+    // Restrict folding to constructor result types that are known safe to precompute.
     value type = signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(fn)->sig);
-    if (!_isimmutable(type)) return false;
+    if (!_isfoldsafeconstructortype(type)) return false;
         
     // A program that evaluates the required op with the selected constants.
     varray_instruction prog;
