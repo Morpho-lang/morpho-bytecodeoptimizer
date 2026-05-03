@@ -45,7 +45,7 @@ bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
 
 /** Writes a value to a register */
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx) {
-    if (rindx>rlist->nreg) return;
+    if (rindx>=rlist->nreg) return;
     
     // Repair other registers if this one has been duplicated
     if (rlist->rinfo[rindx].ndup>0) reginfolist_unduplicate(rlist, rindx);
@@ -62,25 +62,25 @@ void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, reg
 
 /** Sets the type associated with a register */
 void reginfolist_settype(reginfolist *rlist, int rindx, value type) {
-    if (rindx>rlist->nreg) return;
+    if (rindx>=rlist->nreg) return;
     rlist->rinfo[rindx].type=type;
 }
 
 /** Gets the type associated with a register */
 value reginfolist_type(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return MORPHO_NIL;
+    if (rindx>=rlist->nreg) return MORPHO_NIL;
     return rlist->rinfo[rindx].type;
 }
 
 /** Adds one to the usage counter for register i */
 void reginfolist_uses(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return;
+    if (rindx>=rlist->nreg) return;
     rlist->rinfo[rindx].nused++;
 }
 
 /** Gets the content type and indx associated with a register */
 bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, indx *indx) {
-    if (rindx>rlist->nreg) return false;
+    if (rindx>=rlist->nreg) return false;
     if (contents) *contents = rlist->rinfo[rindx].contents;
     if (indx) *indx = rlist->rinfo[rindx].indx;
     return true;
@@ -88,26 +88,26 @@ bool reginfolist_contents(reginfolist *rlist, int rindx, regcontents *contents, 
 
 /** Gets the content type associated with a register */
 regcontents reginfolist_regcontents(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return REG_EMPTY;
+    if (rindx>=rlist->nreg) return REG_EMPTY;
     return rlist->rinfo[rindx].contents;
 }
 
 /** Gets the instruction responsible for writing to this store */
 bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx) {
-    if (rindx>rlist->nreg) return false;
+    if (rindx>=rlist->nreg) return false;
     if (iindx) *iindx = rlist->rinfo[rindx].iindx;
     return true;
 }
 
 /** Count the number of times a register is used */
 int reginfolist_countuses(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return 0;
+    if (rindx>=rlist->nreg) return 0;
     return rlist->rinfo[rindx].nused;
 }
 
 /** Indicate a register is duplicated */
 void reginfolist_duplicate(reginfolist *rlist, int rindx) {
-    if (rindx>rlist->nreg) return;
+    if (rindx>=rlist->nreg) return;
     rlist->rinfo[rindx].ndup++;
 }
 

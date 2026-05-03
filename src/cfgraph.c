@@ -38,6 +38,7 @@ void block_clear(block *b) {
     
     dictionary_clear(&b->src);
     dictionary_clear(&b->uses);
+    dictionary_clear(&b->dest);
     dictionary_clear(&b->writes);
 }
 

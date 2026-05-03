@@ -817,13 +817,14 @@ bool optimize(program *in) {
     
     if (opt.verbose) globalinfolist_show(&opt.glist);
     
+    bool success=!optimize_checkerror(&opt);
+    
     // Layout final code and repair associated data structures
-    if (!optimize_checkerror(&opt)) {
-        layout(&opt);
-    }
+    if (success) layout(&opt);
     
     optimize_clear(&opt);
-    return true;
+    
+    return success;
 }
 
 /* **********************************************************************

@@ -33,7 +33,7 @@ typedef struct {
     instructionindx iindx; /** Instruction that last wrote to this register */
     
     value type; /** Type information if known */
-    bool ndup; /** Number of times the register has been duplicated */
+    int ndup; /** Number of times the register has been duplicated */
 } reginfo;
 
 typedef struct {
