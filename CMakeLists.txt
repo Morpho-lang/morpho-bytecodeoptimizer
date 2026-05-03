@@ -35,7 +35,7 @@ target_include_directories(bytecodeoptimizer PUBLIC /usr/local/include /opt/home
 file(GLOB morpho_subdirectories LIST_DIRECTORIES true ${MORPHO_INCLUDE}/*)
 foreach(dir ${morpho_subdirectories})
     IF(IS_DIRECTORY ${dir})
-        target_include_directories(zeromq PUBLIC ${dir})
+        target_include_directories(bytecodeoptimizer PUBLIC ${dir})
     ELSE()
         CONTINUE()
     ENDIF()

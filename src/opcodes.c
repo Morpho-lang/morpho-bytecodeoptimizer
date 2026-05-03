@@ -253,6 +253,8 @@ opcodeinfo opcodetable[] = {
     
     { OP_PRINT, "print", OPCODE_USES_A, NULL, NULL, NULL },
     
+    { OP_TYPECHECK, "typecheck", OPCODE_USES_A, NULL, NULL, NULL },
+    
     { OP_BREAK, "break", OPCODE_BLANK, NULL, NULL, NULL },
     
     { OP_CAT, "cat", OPCODE_OVERWRITES_A | OPCODE_USES_RANGEBC, cat_trackingfn, NULL, NULL },

@@ -159,7 +159,7 @@ value optimize_type(optimizer *opt, registerindx r) {
 
 /** Wrapper to get the type information from a value */
 bool optimize_typefromvalue(value val, value *type) {
-    return metafunction_typefromvalue(val, type);
+    return value_type(val, type);
 }
 
 /** Callback function to get a constant from the current constant table */
