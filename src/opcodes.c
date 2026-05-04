@@ -175,6 +175,11 @@ void lup_trackingfn(optimizer *opt) {
     optimize_write(opt, DECODE_A(instr), REG_UPVALUE, DECODE_B(instr));
 }
 
+void sup_trackingfn(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    reginfolist_invalidate(&opt->rlist, REG_UPVALUE, DECODE_A(instr));
+}
+
 void lpr_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_writevalue(opt, DECODE_A(instr));
@@ -246,7 +251,7 @@ opcodeinfo opcodetable[] = {
     { OP_LPR, "lpr", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, lpr_trackingfn, NULL, NULL },
     { OP_SPR, "spr", OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, NULL, NULL, NULL },
     { OP_LUP, "lup", OPCODE_OVERWRITES_A, lup_trackingfn, NULL, NULL },
-    { OP_SUP, "sup", OPCODE_USES_B | OPCODE_NODELETE, NULL, NULL, NULL },
+    { OP_SUP, "sup", OPCODE_USES_B | OPCODE_NODELETE, sup_trackingfn, NULL, NULL },
     { OP_LIX, "lix", OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_NODELETE, lix_trackingfn, NULL, NULL },
     { OP_LIXL, "lixl", OPCODE_OVERWRITES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_NODELETE, lixl_trackingfn, NULL, NULL },
     { OP_SIX, "six", OPCODE_USES_A | OPCODE_USES_RANGEBC | OPCODE_NODELETE, NULL, NULL, NULL },
