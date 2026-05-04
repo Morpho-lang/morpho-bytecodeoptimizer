@@ -757,27 +757,86 @@ bool optimize_block(optimizer *opt, block *blk) {
  * Optimization passes
  * ********************************************************************** */
 
-/** Computes the usage of globals from a block by looping over and analyzing instructions */
-void optimize_globalusageforblock(optimizer *opt, block *blk) {
-    for (instructionindx i=blk->start; i<=blk->end; i++) {
-        instruction instr = optimize_getinstructionat(opt, i);
-        instruction op=DECODE_OP(instr);
-        if (op==OP_LGL) globalinfolist_read(&opt->glist, DECODE_Bx(instr));
-        else if (op==OP_SGL) globalinfolist_store(&opt->glist, DECODE_Bx(instr));
-    }
+/** Function type to initialize an optimizer prepass. */
+typedef void (*optimizationprepassinitfn) (optimizer *opt);
+
+/** Function type to visit an instruction during an optimizer prepass. */
+typedef void (*optimizationprepassvisitfn) (optimizer *opt, block *blk, instruction instr);
+
+/** Function type to finalize an optimizer prepass. */
+typedef void (*optimizationprepassfinalizefn) (optimizer *opt);
+
+typedef struct {
+    optimizationprepassinitfn init;
+    optimizationprepassfinalizefn finalize;
+} optimizationprepass;
+
+typedef struct {
+    int prepass;
+    instruction match;
+    optimizationprepassvisitfn visit;
+} optimizationprepassvisitor;
+
+/* -------------------------------------
+ * Global usage
+ * ------------------------------------- */
+
+/** Initializes the global-usage prepass. */
+void optimize_globalusage_init(optimizer *opt) {
+    globalinfolist_startpass(&opt->glist);
 }
 
-/** Computes usage of global variables */
-void optimize_globalusage(optimizer *opt) {
-    globalinfolist_startpass(&opt->glist);
+/** Records a global read during prepass scanning. */
+void optimize_globalread_visit(optimizer *opt, block *blk, instruction instr) {
+    globalinfolist_read(&opt->glist, DECODE_Bx(instr));
+}
+
+/** Records a global store during prepass scanning. */
+void optimize_globalstore_visit(optimizer *opt, block *blk, instruction instr) {
+    globalinfolist_store(&opt->glist, DECODE_Bx(instr));
+}
+
+optimizationprepass prepasses[] = {
+    { optimize_globalusage_init, NULL },
+    { NULL, NULL }
+};
+
+optimizationprepassvisitor prepassvisitors[] = {
+    { 0, OP_LGL, optimize_globalread_visit },
+    { 0, OP_SGL, optimize_globalstore_visit },
+    { -1, OP_END, NULL }
+};
+
+/** Run all optimizer prepasses for the current pass. */
+void optimize_runprepasses(optimizer *opt) {
+    for (int i=0; prepasses[i].init && !optimize_checkerror(opt); i++) {
+        if (prepasses[i].init) prepasses[i].init(opt);
+    }
+
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
-        optimize_globalusageforblock(opt, &opt->graph.data[i]);
+        block *blk = &opt->graph.data[i];
+
+        for (instructionindx j=blk->start; j<=blk->end && !optimize_checkerror(opt); j++) {
+            instruction instr = optimize_getinstructionat(opt, j);
+            instruction op = DECODE_OP(instr);
+
+            for (int k=0; prepassvisitors[k].prepass>=0; k++) {
+                if ((prepassvisitors[k].match==op || prepassvisitors[k].match==OP_ANY) &&
+                    prepassvisitors[k].visit) {
+                    prepassvisitors[k].visit(opt, blk, instr);
+                }
+            }
+        }
+    }
+
+    for (int i=0; prepasses[i].init && !optimize_checkerror(opt); i++) {
+        if (prepasses[i].finalize) prepasses[i].finalize(opt);
     }
 }
 
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
-    optimize_globalusage(opt);
+    optimize_runprepasses(opt);
     
     opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
