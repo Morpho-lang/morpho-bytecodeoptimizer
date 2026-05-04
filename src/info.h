@@ -55,4 +55,39 @@ void globalinfolist_startpass(globalinfolist *glist);
 
 void globalinfolist_show(globalinfolist *glist);
 
+/* **********************************************************************
+ * Information about methods/functions
+ * ********************************************************************** */
+
+typedef enum {
+    METHODINFO_NONE               = 0x0,
+    METHODINFO_USESELF_DISPATCH   = 0x1
+} methodinfoflags;
+
+typedef struct {
+    int nowners;
+    unsigned int flags;
+} mthdinfo;
+
+typedef struct {
+    objectfunction *method;
+    mthdinfo info;
+} methodinfoentry;
+
+DECLARE_VARRAY(methodinfoentry, methodinfoentry)
+
+typedef struct {
+    varray_methodinfoentry list;
+    dictionary indx;
+} methodinfolist;
+
+bool methodinfolist_init(methodinfolist *mlist);
+void methodinfolist_clear(methodinfolist *mlist);
+
+bool methodinfolist_incrementowners(methodinfolist *mlist, objectfunction *method);
+int methodinfolist_countowners(methodinfolist *mlist, objectfunction *method);
+
+bool methodinfolist_setflags(methodinfolist *mlist, objectfunction *method, unsigned int flags);
+bool methodinfolist_hasflags(methodinfolist *mlist, objectfunction *method, unsigned int flags);
+
 #endif

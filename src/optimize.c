@@ -28,9 +28,8 @@ void optimizer_init(optimizer *opt, program *prog) {
     cfgraph_init(&opt->graph);
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
+    methodinfolist_init(&opt->methodinfo);
     varray_instructioninit(&opt->insertions);
-    
-    dictionary_init(&opt->methodinfo);
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
@@ -48,9 +47,8 @@ void optimize_clear(optimizer *opt) {
     cfgraph_clear(&opt->graph);
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
+    methodinfolist_clear(&opt->methodinfo);
     varray_instructionclear(&opt->insertions);
-    
-    dictionary_clear(&opt->methodinfo);
     
     if (opt->v) morpho_freevm(opt->v);
     if (opt->temp) morpho_freeprogram(opt->temp);
@@ -60,18 +58,13 @@ void optimize_clear(optimizer *opt) {
  * Methodinfo
  * ********************************************************************** */
 
-// Adds a method into the methodinfo dictionary
-void _processfunction(objectfunction *fn, dictionary *out) {
-    value res = MORPHO_INTEGER(1);
-    if (dictionary_get(out, MORPHO_OBJECT(fn), &res) &&
-        MORPHO_ISINTEGER(res)) {
-        res = MORPHO_INTEGER(MORPHO_GETINTEGERVALUE(res)+1);
-    }
-    dictionary_insert(out, MORPHO_OBJECT(fn), res);
+// Adds a method into the methodinfo list
+void _processfunction(objectfunction *fn, methodinfolist *out) {
+    methodinfolist_incrementowners(out, fn);
 }
 
 // Searches a metafunction for methods
-void _processmetafunction(objectmetafunction *mfn, dictionary *out) {
+void _processmetafunction(objectmetafunction *mfn, methodinfolist *out) {
     for (int i=0; i<mfn->fns.count; i++) {
         value fn = mfn->fns.data[i];
         if (MORPHO_ISFUNCTION(fn)) {
@@ -81,7 +74,7 @@ void _processmetafunction(objectmetafunction *mfn, dictionary *out) {
 }
 
 // Searches a class's method table
-void _processclass(objectclass *klass, dictionary *out) {
+void _processclass(objectclass *klass, methodinfolist *out) {
     for (int i=0; i<klass->methods.capacity; i++) {
         value label = klass->methods.contents[i].key;
         if (MORPHO_ISNIL(label)) continue;
@@ -106,12 +99,7 @@ void optimize_methodinfo(optimizer *opt) {
 
 /* Retrieve the count of method owners */
 int optimize_methodcountowners(optimizer *opt, objectfunction *method) {
-    value count;
-    int nowners = 0;
-    if (dictionary_get(&opt->methodinfo, MORPHO_OBJECT(method), &count) &&
-        MORPHO_ISINTEGER(count)) nowners = MORPHO_GETINTEGERVALUE(count);
-        
-    return nowners;
+    return methodinfolist_countowners(&opt->methodinfo, method);
 }
 
 /* **********************************************************************

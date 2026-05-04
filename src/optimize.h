@@ -27,6 +27,7 @@ typedef struct {
 
     reginfolist rlist; /** Used to track register state */
     globalinfolist glist; /** Used to track globals */
+    methodinfolist methodinfo; /** Store function/method metadata */
     
     int pass; /** Count passes */
     
@@ -36,8 +37,6 @@ typedef struct {
     int nchanged; /** Number of instructions changed in this pass */
     
     varray_instruction insertions;
-
-    dictionary methodinfo; /** Store method usage for each function */
     
     vm *v; /** VM to execute subprograms */
     program *temp; /** Temporary program structure */
