@@ -740,6 +740,9 @@ bool optimize_block(optimizer *opt, block *blk) {
             if (strategy_optimizeinstruction(opt, opt->pass)) {
                 optimize_usage(opt); // Conservatively mark anything new as used
             }
+
+            // Abort if we generated an insertion
+            if (DECODE_OP(optimize_getinstruction(opt))==OP_INSERT) break;
             
             // Check if an error occurred and quit if it did
             if (optimize_checkerror(opt)) return false;
@@ -749,7 +752,7 @@ bool optimize_block(optimizer *opt, block *blk) {
             
             if (opt->verbose) reginfolist_show(&opt->rlist);
         }
-        
+
         if (optimize_hasinsertions(opt, blk)) {
             optimize_processinsertions(opt, blk);
         } else optimize_dead_store_elimination(opt, blk);
