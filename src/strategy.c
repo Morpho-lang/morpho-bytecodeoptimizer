@@ -378,6 +378,7 @@ bool strategy_method_resolution(optimizer *opt) {
 
 bool strategy_metafunction_reduction(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    bool isMethod = (DECODE_OP(instr) == OP_METHOD);
     
     registerindx rA=DECODE_A(instr);
     int nargs = DECODE_B(instr);
@@ -390,7 +391,7 @@ bool strategy_metafunction_reduction(optimizer *opt) {
     if (!MORPHO_ISMETAFUNCTION(fn)) return false;
     
     value types[nargs];
-    for (registerindx i=0; i<nargs; i++) types[i]=optimize_type(opt, rA + i + 1);
+    for (registerindx i=0; i<nargs; i++) types[i]=optimize_type(opt, rA + i + (isMethod ? 2 : 1));
     
     if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &opt->err, &newfn) &&
         !MORPHO_ISEQUAL(fn, newfn) &&
@@ -424,6 +425,7 @@ optimizationstrategy strategies[] = {
     { OP_INVOKE, strategy_method_resolution,              0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     { OP_CALL, strategy_metafunction_reduction,           0 },
+    { OP_METHOD, strategy_metafunction_reduction,         0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },
     { OP_SGL,  strategy_unused_global,                    1 },

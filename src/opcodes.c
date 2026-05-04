@@ -155,6 +155,8 @@ void call_trackingfn(optimizer *opt) {
         type=signature_getreturntype(&MORPHO_GETFUNCTION(content)->sig);
     } else if (MORPHO_ISBUILTINFUNCTION(content)) {
         type=signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(content)->sig);
+    } else if (MORPHO_ISMETAFUNCTION(content)) {
+        metafunction_inferreturntype(MORPHO_GETMETAFUNCTION(content), &type);
     }
     
     optimize_writevalue(opt, a);
