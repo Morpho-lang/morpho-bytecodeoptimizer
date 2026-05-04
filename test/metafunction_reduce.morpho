@@ -1,0 +1,21 @@
+
+import bytecodeoptimizer
+
+// Reduce metafunctions based on known types
+{
+    fn f(Int a, Int b) {
+        return a + b
+    }
+
+    fn f(Int a) {
+        return a + 1
+    }
+
+    fn f(Float a) {
+        return 2*a 
+    }
+
+    var a = random() 
+
+    print f(a)
+}

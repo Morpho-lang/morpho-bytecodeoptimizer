@@ -154,7 +154,7 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
 }
 
 /* -------------------------------------
- * Dead store elimination
+ * Register replacement
  * ------------------------------------- */
 
 bool strategy_register_replacement(optimizer *opt) {
@@ -372,6 +372,41 @@ bool strategy_method_resolution(optimizer *opt) {
     return success;
 }
 
+/* -------------------------------------
+ * Metafunction reduction
+ * ------------------------------------- */
+
+bool strategy_metafunction_reduction(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    
+    registerindx rA=DECODE_A(instr);
+    int nargs = DECODE_B(instr);
+    int nopt = DECODE_C(instr);
+    
+    indx kindx, newkindx;
+    value fn=MORPHO_NIL, newfn=MORPHO_NIL;
+    if (optimize_isconstant(opt, rA, &kindx)) fn = optimize_getconstant(opt, kindx); // Retrieve the call target
+    
+    if (!MORPHO_ISMETAFUNCTION(fn)) return false;
+    
+    value types[nargs];
+    for (registerindx i=0; i<nargs; i++) types[i]=optimize_type(opt, rA + i + 1);
+    
+    if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &opt->err, &newfn) &&
+        !MORPHO_ISEQUAL(fn, newfn) &&
+        optimize_addconstant(opt, newfn, &newkindx)) {
+        instruction insert[] = { // Insert replacement load constant
+            ENCODE_LONG(OP_LCT, rA, (instruction) newkindx),
+            instr
+        };
+        optimize_insertinstructions(opt, 2, insert);
+        
+        return true;
+    }
+    
+    return false;
+}
+
 /* **********************************************************************
  * Strategy definition table
  * ********************************************************************** */
@@ -388,6 +423,7 @@ optimizationstrategy strategies[] = {
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_INVOKE, strategy_method_resolution,              0 },
     { OP_POW,  strategy_power_reduction,                  0 },
+    { OP_CALL, strategy_metafunction_reduction,           0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },
     { OP_SGL,  strategy_unused_global,                    1 },
