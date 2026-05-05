@@ -373,8 +373,34 @@ bool strategy_method_resolution(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Self-dispatch analysis
+ * ------------------------------------- */
+
+/** Marks functions that dispatch recursively through r0. */
+bool strategy_self_dispatch(optimizer *opt) {
+    registerindx target = optimize_findoriginalregister(opt, DECODE_A(optimize_getinstruction(opt)));
+
+    if (target==0) {
+        block *blk = optimize_currentblock(opt);
+        methodinfolist_setflags(&opt->methodinfo, blk->func, METHODINFO_USESELF_DISPATCH);
+    }
+
+    return false;
+}
+
+/* -------------------------------------
  * Metafunction reduction
  * ------------------------------------- */
+
+static bool _hasselfdispatch(optimizer *opt, objectmetafunction *mfn) {
+    for (int i=0; i<mfn->fns.count; i++) {
+        value fn = mfn->fns.data[i];
+        if (MORPHO_ISFUNCTION(fn) &&
+            methodinfolist_hasflags(&opt->methodinfo, MORPHO_GETFUNCTION(fn), METHODINFO_USESELF_DISPATCH)) return true;
+    }
+
+    return false;
+}
 
 bool strategy_metafunction_reduction(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
@@ -389,11 +415,13 @@ bool strategy_metafunction_reduction(optimizer *opt) {
     if (optimize_isconstant(opt, rA, &kindx)) fn = optimize_getconstant(opt, kindx); // Retrieve the call target
     
     if (!MORPHO_ISMETAFUNCTION(fn)) return false;
+    if (_hasselfdispatch(opt, MORPHO_GETMETAFUNCTION(fn))) return false;
     
     value types[nargs];
     for (registerindx i=0; i<nargs; i++) types[i]=optimize_type(opt, rA + i + (isMethod ? 2 : 1));
     
-    if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &opt->err, &newfn) &&
+    error reduceerr = opt->err;
+    if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &reduceerr, &newfn) &&
         !MORPHO_ISEQUAL(fn, newfn) &&
         optimize_addconstant(opt, newfn, &newkindx)) {
         instruction insert[] = { // Insert replacement load constant
@@ -424,6 +452,8 @@ optimizationstrategy strategies[] = {
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_INVOKE, strategy_method_resolution,              0 },
     { OP_POW,  strategy_power_reduction,                  0 },
+    { OP_CALL, strategy_self_dispatch,                    0 },
+    { OP_METHOD, strategy_self_dispatch,                  0 },
     { OP_CALL, strategy_metafunction_reduction,           0 },
     { OP_METHOD, strategy_metafunction_reduction,         0 },
     

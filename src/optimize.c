@@ -767,15 +767,15 @@ typedef void (*optimizationprepassvisitfn) (optimizer *opt, block *blk, instruct
 typedef void (*optimizationprepassfinalizefn) (optimizer *opt);
 
 typedef struct {
-    optimizationprepassinitfn init;
-    optimizationprepassfinalizefn finalize;
-} optimizationprepass;
-
-typedef struct {
-    int prepass;
     instruction match;
     optimizationprepassvisitfn visit;
 } optimizationprepassvisitor;
+
+typedef struct {
+    optimizationprepassinitfn init;
+    optimizationprepassfinalizefn finalize;
+    optimizationprepassvisitor *visitors;
+} optimizationprepass;
 
 /* -------------------------------------
  * Global usage
@@ -796,22 +796,27 @@ void optimize_globalstore_visit(optimizer *opt, block *blk, instruction instr) {
     globalinfolist_store(&opt->glist, DECODE_Bx(instr));
 }
 
-optimizationprepass prepasses[] = {
-    { optimize_globalusage_init, NULL },
-    { NULL, NULL }
+optimizationprepassvisitor globalusagevisitors[] = {
+    { OP_LGL, optimize_globalread_visit },
+    { OP_SGL, optimize_globalstore_visit },
+    { OP_END, NULL }
 };
 
-optimizationprepassvisitor prepassvisitors[] = {
-    { 0, OP_LGL, optimize_globalread_visit },
-    { 0, OP_SGL, optimize_globalstore_visit },
-    { -1, OP_END, NULL }
+/* -------------------------------------
+ * Pre-pass table
+ * ------------------------------------- */
+
+optimizationprepass prepasses[] = {
+    { optimize_globalusage_init, NULL, globalusagevisitors },
+    { NULL, NULL, NULL }
 };
 
 /** Run all optimizer prepasses for the current pass. */
 void optimize_runprepasses(optimizer *opt) {
-    for (int i=0; prepasses[i].init && !optimize_checkerror(opt); i++) {
-        if (prepasses[i].init) prepasses[i].init(opt);
-    }
+    int nprepasses=0;
+    while (prepasses[nprepasses].init) nprepasses++;
+    
+    for (int i=0; i<nprepasses; i++) prepasses[i].init(opt);
 
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
         block *blk = &opt->graph.data[i];
@@ -820,18 +825,17 @@ void optimize_runprepasses(optimizer *opt) {
             instruction instr = optimize_getinstructionat(opt, j);
             instruction op = DECODE_OP(instr);
 
-            for (int k=0; prepassvisitors[k].prepass>=0; k++) {
-                if ((prepassvisitors[k].match==op || prepassvisitors[k].match==OP_ANY) &&
-                    prepassvisitors[k].visit) {
-                    prepassvisitors[k].visit(opt, blk, instr);
+            for (int k=0; k<nprepasses && !optimize_checkerror(opt); k++) {
+                optimizationprepassvisitor *visitors = prepasses[k].visitors;
+
+                for (int l=0; visitors[l].visit; l++) {
+                    if (visitors[l].match==op || visitors[l].match==OP_ANY) visitors[l].visit(opt, blk, instr);
                 }
             }
         }
     }
 
-    for (int i=0; prepasses[i].init && !optimize_checkerror(opt); i++) {
-        if (prepasses[i].finalize) prepasses[i].finalize(opt);
-    }
+    for (int i=0; i<nprepasses; i++) if (prepasses[i].finalize) prepasses[i].finalize(opt);
 }
 
 /** Run an optimization pass */
