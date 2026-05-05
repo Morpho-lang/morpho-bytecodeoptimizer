@@ -480,6 +480,16 @@ bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
     return success; 
 }
 
+static bool _isdeadstoresafearithmetictype(value type) {
+    return (MORPHO_ISEQUAL(type, typeint) ||
+}
+
+bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx r) {
+    instruction op = DECODE_OP(instr);
+    if (op<OP_ADD || op>OP_POW) return true;
+    return _isdeadstoresafearithmetictype(optimize_type(opt, r));
+}
+
 /** Optimizations performed at the end of a code block */
 void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     if (opt->verbose) printf("Ending block\n");
@@ -494,6 +504,7 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
             instruction instr = optimize_getinstructionat(opt, src);
+            if (!optimize_candeletedeadstore(opt, instr, i)) continue;
             
             bool deleted = optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
             

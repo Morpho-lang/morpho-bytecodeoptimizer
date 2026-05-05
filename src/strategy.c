@@ -185,7 +185,6 @@ bool strategy_register_replacement(optimizer *opt) {
 
 bool strategy_dead_store_elimination(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
-    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
     // Return quickly if this instruction doesn't overrwrite
     registerindx r;
@@ -196,7 +195,8 @@ bool strategy_dead_store_elimination(optimizer *opt) {
     if (!optimize_isempty(opt, r) &&
         optimize_countuses(opt, r)==0 &&
         optimize_source(opt, r, &iindx) &&
-        block_contains(opt->currentblk, iindx)) {
+        block_contains(opt->currentblk, iindx) &&
+        optimize_candeletedeadstore(opt, optimize_getinstructionat(opt, iindx), r)) {
         
         success=optimize_deleteinstruction(opt, iindx);
     }
