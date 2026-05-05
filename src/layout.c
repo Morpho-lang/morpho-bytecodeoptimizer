@@ -5,6 +5,7 @@
 */
 
 #include "morphocore.h"
+#include <stdlib.h>
 #include <morpho/debug.h>
 #include "layout.h"
 #include "cfgraph.h"
@@ -249,98 +250,163 @@ void layout_deleteunused(optimizer *opt) {
  * ********************************************************************** */
 
 typedef struct {
-    program *in;
-    
-    indx aindx; // Counter for annotation list
-    instructionindx iindx; // Instruction counter
-    
-    varray_debugannotation out; // Annotations processed
-} annotationfixer;
+    debugannotation *element;
+    bool hasboundary;
+    varray_debugannotation boundary;
+} annotationanchor;
 
-void annotationfixer_init(annotationfixer *fix, program *p) {
-    fix->in = p;
-    fix->aindx = 0;
-    fix->iindx = 0;
-    varray_debugannotationinit(&fix->out);
-}
-
-void annotationfixer_clear(annotationfixer *fix, program *p) {
-    varray_debugannotationclear(&fix->out);
-}
-
-/** Gets the current annotation */
-debugannotation *annotationfixer_current(annotationfixer *fix) {
-    return &fix->in->annotations.data[fix->aindx];
-}
-
-/** Get next annotation and update annotation counters */
-void annotationfixer_advance(annotationfixer *fix) {
-    debugannotation *ann=annotationfixer_current(fix);
-    
-    if (ann->type==DEBUG_ELEMENT) fix->iindx+=ann->content.element.ninstr;
-    
-    fix->aindx++;
-}
-
-/** Are we at the end of annotations ? */
-bool annotationfixer_atend(annotationfixer *fix) {
-    return !(fix->aindx < fix->in->annotations.count);
-}
-
-/** Count the number of nops between two instructions */
-int annotationfixer_countnops(annotationfixer *fix, instructionindx start, int ninstr) {
-    if (start>=fix->in->code.count) return ninstr;
-
-    int count=0;
-    instructionindx end = start+ninstr;
-    if (end>fix->in->code.count) end=fix->in->code.count;
-    for (instructionindx i=start; i<end; i++) {
-        instruction instr = fix->in->code.data[i];
-        if (DECODE_OP(instr)==OP_NOP) count++;
+static void annotationanchor_add(annotationanchor *anchor, debugannotation *ann) {
+    if (!anchor->hasboundary) {
+        varray_debugannotationinit(&anchor->boundary);
+        anchor->hasboundary = true;
     }
 
-    count += (int) ((start+ninstr)-end);
-    return count;
+    varray_debugannotationadd(&anchor->boundary, ann, 1);
 }
 
-/** Loops over annotations, fixing the reference count */
-void layout_fixannotations(optimizer *opt) {
-    annotationfixer fix;
-    annotationfixer_init(&fix, opt->prog);
-    
-    if (opt->verbose) {
-        printf("===Fixing annotations\nOld annotations:\n");
-        debugannotation_showannotations(&fix.in->annotations);
+static void annotationanchors_clear(annotationanchor *anchors, instructionindx nanchors) {
+    for (instructionindx i=0; i<nanchors; i++) {
+        if (anchors[i].hasboundary) {
+            varray_debugannotationclear(&anchors[i].boundary);
+        }
     }
-    
-    for (;
-         !annotationfixer_atend(&fix);
-         annotationfixer_advance(&fix)) {
-        debugannotation *ann=annotationfixer_current(&fix);
-        
-        if (ann->type==DEBUG_ELEMENT) {
-            int nnops = annotationfixer_countnops(&fix, fix.iindx, ann->content.element.ninstr);
-            
-            int ninstr = ann->content.element.ninstr - nnops;
-            
-            if (ninstr) { // Don't copy across empty instructions.
-                debugannotation new = *ann;
-                new.content.element.ninstr = ninstr;
-                varray_debugannotationadd(&fix.out, &new, 1);
+}
+
+static void annotationfixer_flush(varray_debugannotation *out, debugannotation *element, int *count) {
+    if (!element || *count<=0) return;
+
+    debugannotation ann = *element;
+    ann.content.element.ninstr = *count;
+    varray_debugannotationadd(out, &ann, 1);
+    *count = 0;
+}
+
+static void annotationfixer_append(varray_debugannotation *out, varray_debugannotation *pending) {
+    for (unsigned int i=0; i<pending->count; i++) {
+        varray_debugannotationadd(out, &pending->data[i], 1);
+    }
+    pending->count = 0;
+}
+
+/** Rebuild annotations in final emitted instruction order. */
+static void blockcomposer_fixannotations(blockcomposer *comp) {
+    program *prog = comp->in;
+    instructionindx oldcount = prog->code.count;
+    annotationanchor *anchors = calloc(oldcount+1, sizeof(annotationanchor));
+    varray_debugannotation pending;
+    varray_debugannotation out;
+    varray_debugannotation displaced;
+    instructionindx iindx = 0;
+    debugannotation *current = NULL;
+    int currentcount = 0;
+
+    if (!anchors) return;
+
+    varray_debugannotationinit(&pending);
+    varray_debugannotationinit(&out);
+    varray_debugannotationinit(&displaced);
+
+    if (prog->annotations.count>0) {
+        for (unsigned int i=0; i<prog->annotations.count; i++) {
+            debugannotation *ann = &prog->annotations.data[i];
+
+            if (ann->type==DEBUG_ELEMENT) {
+                instructionindx anchor = (iindx<=oldcount) ? iindx : oldcount;
+                for (unsigned int j=0; j<pending.count; j++) {
+                    annotationanchor_add(&anchors[anchor], &pending.data[j]);
+                }
+                pending.count = 0;
+
+                instructionindx end = iindx + ann->content.element.ninstr;
+                if (end>oldcount) end=oldcount;
+                for (instructionindx j=iindx; j<end; j++) {
+                    anchors[j].element = ann;
+                }
+
+                iindx += ann->content.element.ninstr;
+            } else {
+                varray_debugannotationadd(&pending, ann, 1);
             }
-        } else { // Copy across non element records
-            varray_debugannotationadd(&fix.out, ann, 1);
+        }
+
+        instructionindx anchor = (iindx<=oldcount) ? iindx : oldcount;
+        for (unsigned int j=0; j<pending.count; j++) {
+            annotationanchor_add(&anchors[anchor], &pending.data[j]);
+        }
+        pending.count = 0;
+    }
+
+    if (comp->graph->count>0) {
+        for (unsigned int i=0; i<comp->graph->count; i++) {
+            block *blk = comp->graph->data+i;
+            value mapped;
+            bool emitted = dictionary_get(&comp->map, MORPHO_INTEGER(i), &mapped) && MORPHO_ISINTEGER(mapped);
+            bool copied = false;
+            debugannotation *fallback = current;
+
+            if (!emitted) continue;
+
+            for (instructionindx j=blk->start; j<=blk->end && j<oldcount; j++) {
+                if (anchors[j].element) fallback = anchors[j].element;
+                if (anchors[j].hasboundary) {
+                    for (unsigned int k=0; k<anchors[j].boundary.count; k++) {
+                        varray_debugannotationadd(&displaced, &anchors[j].boundary.data[k], 1);
+                    }
+                }
+
+                instruction instr = blockcomposer_getinstruction(comp, j);
+                if (DECODE_OP(instr)==OP_NOP) continue;
+
+                if (displaced.count) {
+                    annotationfixer_flush(&out, current, &currentcount);
+                    annotationfixer_append(&out, &displaced);
+                }
+
+                if (anchors[j].element) {
+                    if (current != anchors[j].element) {
+                        annotationfixer_flush(&out, current, &currentcount);
+                        current = anchors[j].element;
+                    }
+                } else if (!current) {
+                    current = fallback;
+                }
+
+                currentcount++;
+                copied = true;
+            }
+
+            if (!copied) {
+                if (displaced.count) {
+                    annotationfixer_flush(&out, current, &currentcount);
+                    annotationfixer_append(&out, &displaced);
+                }
+
+                if (fallback && current != fallback) {
+                    annotationfixer_flush(&out, current, &currentcount);
+                    current = fallback;
+                } else if (!current) {
+                    current = fallback;
+                }
+                currentcount++;
+            }
         }
     }
 
-    // Swap old and new annotations
-    varray_debugannotation tmp = fix.in->annotations;
-    fix.in->annotations = fix.out; fix.out=tmp;
-    
-    if (opt->verbose) {
-        printf("New annotations:\n");
-        debugannotation_showannotations(&fix.in->annotations);
+    if (displaced.count) {
+        annotationfixer_flush(&out, current, &currentcount);
+        annotationfixer_append(&out, &displaced);
     }
+    annotationfixer_flush(&out, current, &currentcount);
+
+    varray_debugannotation tmp = prog->annotations;
+    prog->annotations = out;
+    out = tmp;
+
+    varray_debugannotationclear(&pending);
+    varray_debugannotationclear(&out);
+    varray_debugannotationclear(&displaced);
+    annotationanchors_clear(anchors, oldcount+1);
+    free(anchors);
 }
 
 /* **********************************************************************
@@ -354,24 +420,31 @@ static bool _findmappedentry(blockcomposer *comp, block *blk, dictionary *checke
 
     dictionary_insert(checked, MORPHO_INTEGER(blkindx), MORPHO_NIL);
 
+    bool found = false;
     value mapped;
     block *outblk;
     if (dictionary_get(&comp->map, MORPHO_INTEGER(blkindx), &mapped) &&
         MORPHO_ISINTEGER(mapped) &&
         cfgraph_indx(&comp->outgraph, MORPHO_GETINTEGERVALUE(mapped), &outblk)) {
         *entry = outblk->start;
-        return true;
+        found = true;
     }
 
     for (int i=0; i<blk->dest.capacity; i++) {
         value key = blk->dest.contents[i].key;
         block *dest;
+        instructionindx candidate;
         if (MORPHO_ISINTEGER(key) &&
             cfgraph_indx(comp->graph, MORPHO_GETINTEGERVALUE(key), &dest) &&
-            _findmappedentry(comp, dest, checked, entry)) return true;
+            _findmappedentry(comp, dest, checked, &candidate)) {
+            if (!found || candidate < *entry) {
+                *entry = candidate;
+                found = true;
+            }
+        }
     }
 
-    return false;
+    return found;
 }
 
 static void blockcomposer_fixentries(blockcomposer *comp) {
@@ -429,8 +502,9 @@ void layout_consolidate(optimizer *opt) {
             blockcomposer_fixbranchtable(&comp, &MORPHO_GETDICTIONARY(key)->dict);
         }
     }
-    
+
     blockcomposer_fixcount(&comp);
+    blockcomposer_fixannotations(&comp);
 
     // Swap old and new code
     varray_instruction tmp = comp.in->code;
@@ -448,5 +522,4 @@ void layout(optimizer *opt) {
     layout_sortcfgraph(opt);
     layout_deleteunused(opt);
     layout_consolidate(opt);
-    layout_fixannotations(opt);
 }

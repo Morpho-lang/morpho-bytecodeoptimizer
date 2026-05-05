@@ -277,8 +277,9 @@ bool strategy_constant_immutable(optimizer *opt) {
     int nopt = DECODE_C(instr);
     
     // Ensure call target and arguments are all constants
-    indx cindx[nargs+1];
-    for (int i=0; i<=nargs+nopt; i++) {
+    int nregs = nargs + 2*nopt + 1;
+    indx cindx[nregs];
+    for (int i=0; i<nregs; i++) {
         CHECK(optimize_isconstant(opt, rA + i, cindx + i));
     }
     
@@ -297,7 +298,7 @@ bool strategy_constant_immutable(optimizer *opt) {
     varray_instruction prog;
     varray_instructioninit(&prog);
     
-    for (int i=0; i<nargs+nopt+1; i++) { // Setup load constants incl. the function
+    for (int i=0; i<nregs; i++) { // Setup load constants incl. the function
         varray_instructionwrite(&prog, ENCODE_LONG(OP_LCT, i, (instruction) cindx[i]));
     }
     

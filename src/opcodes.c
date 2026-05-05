@@ -139,6 +139,7 @@ void cmp_trackingfn(optimizer *opt) {
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
     
     value type=MORPHO_NIL;
     value content=MORPHO_NIL;
@@ -159,6 +160,10 @@ void call_trackingfn(optimizer *opt) {
         metafunction_inferreturntype(MORPHO_GETMETAFUNCTION(content), &type);
     }
     
+    for (registerindx i=1; i<=nargs+2*nopt; i++) {
+        optimize_writevalue(opt, a+i);
+    }
+    
     optimize_writevalue(opt, a);
     if (!MORPHO_ISNIL(type)) optimize_settype(opt, a, type);
 }
@@ -166,6 +171,11 @@ void call_trackingfn(optimizer *opt) {
 void invoke_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    
+    for (registerindx i=2; i<=nargs+2*nopt+1; i++) {
+        optimize_writevalue(opt, a+i);
+    }
     
     optimize_writevalue(opt, a+1);
 }

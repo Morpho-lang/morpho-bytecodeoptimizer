@@ -5,3 +5,6 @@ build/*
 lib/*
 test/testsuite/FailedTests.txt
 test/testsuite/tests
+test/examples
+*.png
+*.pov

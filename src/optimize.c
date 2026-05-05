@@ -364,6 +364,7 @@ bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value kons
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
     instruction instr = optimize_getinstructionat(opt, indx);
     if (DECODE_OP(instr)==OP_INSERT) return false; // Instruction to be deleted was an insertion point
+    if (DECODE_OP(instr)==OP_NOP) return false;
     
     opcodeflags flags = opcode_getflags(DECODE_OP(instr));
     
