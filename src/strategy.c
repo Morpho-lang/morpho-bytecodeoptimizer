@@ -114,6 +114,69 @@ bool strategy_constant_folding(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Algebraic identities
+ * ------------------------------------- */
+
+static bool _issafearithmetictype(value type) {
+    return (MORPHO_ISEQUAL(type, typeint) || MORPHO_ISEQUAL(type, typefloat));
+}
+
+static bool _iszero(value v) {
+    return ((MORPHO_ISINTEGER(v) && MORPHO_GETINTEGERVALUE(v)==0) || (MORPHO_ISFLOAT(v) && MORPHO_GETFLOATVALUE(v)==0.0));
+}
+
+static bool _isone(value v) {
+    return ((MORPHO_ISINTEGER(v) && MORPHO_GETINTEGERVALUE(v)==1) || (MORPHO_ISFLOAT(v) && MORPHO_GETFLOATVALUE(v)==1.0));
+}
+
+static bool _matchconstantregister(optimizer *opt, registerindx r, bool (*pred) (value)) {
+    indx kindx; if (!optimize_findconstant(opt, r, &kindx)) return false; return pred(optimize_getconstant(opt, kindx));
+}
+
+static bool _replacewithmoveifnumeric(optimizer *opt, registerindx dst, registerindx src) {
+    if (!_issafearithmetictype(optimize_type(opt, src))) return false; optimize_replaceinstruction(opt, ENCODE_DOUBLE(OP_MOV, dst, src)); return true;
+}
+
+bool strategy_add_identity(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx a=DECODE_A(instr), b=DECODE_B(instr), c=DECODE_C(instr);
+    if (_matchconstantregister(opt, c, _iszero)) return _replacewithmoveifnumeric(opt, a, b);
+    if (_matchconstantregister(opt, b, _iszero)) return _replacewithmoveifnumeric(opt, a, c);
+
+    return false;
+}
+
+bool strategy_sub_identity(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+
+    if (!_matchconstantregister(opt, DECODE_C(instr), _iszero)) return false;
+    return _replacewithmoveifnumeric(opt, DECODE_A(instr), DECODE_B(instr));
+}
+
+bool strategy_mul_identity(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx a=DECODE_A(instr), b=DECODE_B(instr), c=DECODE_C(instr);
+    if (_matchconstantregister(opt, c, _isone)) return _replacewithmoveifnumeric(opt, a, b);
+    if (_matchconstantregister(opt, b, _isone)) return _replacewithmoveifnumeric(opt, a, c);
+
+    return false;
+}
+
+bool strategy_div_identity(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+
+    if (!_matchconstantregister(opt, DECODE_C(instr), _isone)) return false;
+    return _replacewithmoveifnumeric(opt, DECODE_A(instr), DECODE_B(instr));
+}
+
+bool strategy_pow_identity(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+
+    if (!_matchconstantregister(opt, DECODE_C(instr), _isone)) return false;
+    return _replacewithmoveifnumeric(opt, DECODE_A(instr), DECODE_B(instr));
+}
+
+/* -------------------------------------
  * Common subexpression elimination
  * ------------------------------------- */
 
@@ -515,6 +578,11 @@ optimizationstrategy strategies[] = {
     { OP_B,    strategy_redundant_branch_elimination,     0 },
     { OP_BIF,  strategy_constant_branch_elimination,      0 },
     { OP_BIFF, strategy_constant_branch_elimination,      0 },
+    { OP_ADD,  strategy_add_identity,                     0 },
+    { OP_SUB,  strategy_sub_identity,                     0 },
+    { OP_MUL,  strategy_mul_identity,                     0 },
+    { OP_DIV,  strategy_div_identity,                     0 },
+    { OP_POW,  strategy_pow_identity,                     0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
     { OP_LCT,  strategy_duplicate_load,                   0 },
     { OP_LGL,  strategy_duplicate_load,                   0 },

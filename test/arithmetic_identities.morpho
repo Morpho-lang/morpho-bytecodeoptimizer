@@ -1,0 +1,25 @@
+// Arithmetic identities that should be optimized away
+
+import bytecodeoptimizer
+
+{
+    var x = random()
+    print x + 0
+    print 0 + x
+
+    var y = random()
+    print y - 0
+
+    var z = random()
+    print z * 1
+    print 1 * z
+
+    var w = random()
+    print w / 1
+
+    var u = random()
+    print u ^ 1
+
+    var s = "a"
+    print s + 0
+}
