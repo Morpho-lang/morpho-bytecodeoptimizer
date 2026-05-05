@@ -24,6 +24,8 @@ typedef struct {
     error err; 
     
     cfgraph graph;
+    dictionary reachable;
+    bool reachabledirty;
 
     reginfolist rlist; /** Used to track register state */
     globalinfolist glist; /** Used to track globals */
@@ -104,7 +106,7 @@ void optimize_disassemble(optimizer *opt);
 bool optimize_isused(optimizer *opt, registerindx rindx);
 bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx rindx);
-bool optimize_blockisunreachable(block *blk);
+bool optimize_blockisreachable(optimizer *opt, block *blk);
 void optimize_repairerasedconditionalbranch(optimizer *opt, instruction instr);
 void optimize_repairtakenconditionalbranch(optimizer *opt, instruction instr);
 

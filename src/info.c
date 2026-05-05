@@ -116,6 +116,8 @@ int globalinfolist_countread(globalinfolist *glist, int gindx) {
 void globalinfolist_startpass(globalinfolist *glist) {
     for (int i=0; i<glist->nglobals; i++) {
         globalinfolist_computetype(glist, i);
+        glist->list[i].contents=GLOBAL_EMPTY;
+        glist->list[i].val=MORPHO_NIL;
         glist->list[i].nread=0;
         glist->list[i].nstore=0;
         glist->list[i].typeassignments.count=0; // Clear assignments from previous pass

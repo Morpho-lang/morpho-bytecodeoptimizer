@@ -481,7 +481,7 @@ void layout_consolidate(optimizer *opt) {
     // Copy across blocks
     for (unsigned int i=0; i<comp.graph->count; i++) {
         block *blk = comp.graph->data+i;
-        if (optimize_blockisunreachable(blk)) continue;
+        if (!optimize_blockisreachable(opt, blk)) continue;
         if (block_isentry(blk) && !blockcomposer_blockhasrealinstructions(&comp, blk)) continue;
         blockcomposer_processblock(&comp, blk);
     }

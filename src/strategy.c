@@ -230,7 +230,7 @@ static bool _constantbranchcondition(optimizer *opt, instruction instr, bool *ou
     value konst = optimize_getconstant(opt, kindx);
     CHECK(MORPHO_ISBOOL(konst));
 
-    if (out) *out = MORPHO_GETBOOLVALUE(konst);
+    *out = MORPHO_GETBOOLVALUE(konst);
 
     return true;
 }

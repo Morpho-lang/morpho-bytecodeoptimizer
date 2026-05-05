@@ -26,6 +26,8 @@ void optimizer_init(optimizer *opt, program *prog) {
     
     error_init(&opt->err);
     cfgraph_init(&opt->graph);
+    dictionary_init(&opt->reachable);
+    opt->reachabledirty=true;
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
     methodinfolist_init(&opt->methodinfo);
@@ -45,6 +47,7 @@ void optimizer_init(optimizer *opt, program *prog) {
 void optimize_clear(optimizer *opt) {
     error_clear(&opt->err);
     cfgraph_clear(&opt->graph);
+    dictionary_clear(&opt->reachable);
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
     methodinfolist_clear(&opt->methodinfo);
@@ -448,14 +451,54 @@ void optimize_disassemble(optimizer *opt) {
     printf("\n");
 }
 
-bool optimize_blockisunreachable(block *blk) {
-    return (!block_isentry(blk) && blk->src.count==0);
+static void _optimize_markreachable(optimizer *opt, blockindx blkindx, dictionary *reachable) {
+    block *blk;
+    value indx = MORPHO_INTEGER(blkindx);
+
+    if (dictionary_get(reachable, indx, NULL)) return;
+    dictionary_insert(reachable, indx, MORPHO_NIL);
+
+    if (!cfgraph_indx(&opt->graph, blkindx, &blk)) return;
+
+    for (int i=0; i<blk->dest.capacity; i++) {
+        value key = blk->dest.contents[i].key;
+        if (!MORPHO_ISINTEGER(key)) continue;
+        _optimize_markreachable(opt, MORPHO_GETINTEGERVALUE(key), reachable);
+    }
+}
+
+static void _optimize_refreshreachable(optimizer *opt) {
+    if (!opt->reachabledirty) return;
+
+    dictionary_clear(&opt->reachable);
+    dictionary_init(&opt->reachable);
+    if (opt->graph.count==0) {
+        opt->reachabledirty=false;
+        return;
+    }
+
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        block *entry;
+        if (cfgraph_indx(&opt->graph, i, &entry) && block_isentry(entry)) {
+            _optimize_markreachable(opt, i, &opt->reachable);
+        }
+    }
+
+    opt->reachabledirty=false;
+}
+
+bool optimize_blockisreachable(optimizer *opt, block *blk) {
+    blockindx blkindx;
+
+    if (!cfgraph_findindx(&opt->graph, blk, &blkindx)) return false;
+    _optimize_refreshreachable(opt);
+    return dictionary_get(&opt->reachable, MORPHO_INTEGER(blkindx), NULL);
 }
 
 static void _pruneunreachableblock(optimizer *opt, blockindx blkindx) {
     block *blk;
     if (!cfgraph_indx(&opt->graph, blkindx, &blk) ||
-        !optimize_blockisunreachable(blk)) return;
+        optimize_blockisreachable(opt, blk)) return;
 
     for (int i=0; i<blk->dest.capacity; i++) {
         value key = blk->dest.contents[i].key;
@@ -468,14 +511,33 @@ static void _pruneunreachableblock(optimizer *opt, blockindx blkindx) {
     }
 }
 
+static bool _findsuccessorbyostart(optimizer *opt, block *blk, instructionindx ostart, blockindx *out) {
+    for (int i=0; i<blk->dest.capacity; i++) {
+        value key = blk->dest.contents[i].key;
+        block *dest;
+        if (MORPHO_ISINTEGER(key) &&
+            cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest) &&
+            dest->ostart==ostart) {
+            *out = MORPHO_GETINTEGERVALUE(key);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void _repairconditionalbranch(optimizer *opt, instruction instr, bool removetargetedge) {
     blockindx targetindx, fallthroughindx;
     instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
     instructionindx fallthrough = opt->pc + 1;
     blockindx removeindx;
 
-    if (!cfgraph_findblockindx(&opt->graph, target, &targetindx) ||
-        !cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx)) return;
+    if (target==fallthrough) return;
+
+    if (!_findsuccessorbyostart(opt, opt->currentblk, target, &targetindx) ||
+        !_findsuccessorbyostart(opt, opt->currentblk, fallthrough, &fallthroughindx)) {
+        return;
+    }
 
     /* If the branch target is the fallthrough block, rewriting or erasing the
        conditional does not change CFG connectivity. */
@@ -483,6 +545,7 @@ static void _repairconditionalbranch(optimizer *opt, instruction instr, bool rem
 
     removeindx = (removetargetedge ? targetindx : fallthroughindx);
     if (cfgraph_disconnect(opt->currentblk, removeindx, &opt->graph)) {
+        opt->reachabledirty=true;
         _pruneunreachableblock(opt, removeindx);
     }
 }
@@ -880,7 +943,7 @@ void optimize_runprepasses(optimizer *opt) {
 
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
         block *blk = &opt->graph.data[i];
-        if (optimize_blockisunreachable(blk)) continue;
+        if (!optimize_blockisreachable(opt, blk)) continue;
 
         for (instructionindx j=blk->start; j<=blk->end && !optimize_checkerror(opt); j++) {
             instruction instr = optimize_getinstructionat(opt, j);
@@ -907,7 +970,7 @@ void optimize_pass(optimizer *opt, int n) {
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
         block *blk = &opt->graph.data[i];
-        if (optimize_blockisunreachable(blk)) continue;
+        if (!optimize_blockisreachable(opt, blk)) continue;
         optimize_block(opt, blk);
     }
 }
