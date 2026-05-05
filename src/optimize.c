@@ -511,33 +511,12 @@ static void _pruneunreachableblock(optimizer *opt, blockindx blkindx) {
     }
 }
 
-static bool _findsuccessorbyostart(optimizer *opt, block *blk, instructionindx ostart, blockindx *out) {
-    for (int i=0; i<blk->dest.capacity; i++) {
-        value key = blk->dest.contents[i].key;
-        block *dest;
-        if (MORPHO_ISINTEGER(key) &&
-            cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &dest) &&
-            dest->ostart==ostart) {
-            *out = MORPHO_GETINTEGERVALUE(key);
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static void _repairconditionalbranch(optimizer *opt, instruction instr, bool removetargetedge) {
-    blockindx targetindx, fallthroughindx;
-    instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
-    instructionindx fallthrough = opt->pc + 1;
+    blockindx targetindx = opt->currentblk->branch;
+    blockindx fallthroughindx = opt->currentblk->fallthrough;
     blockindx removeindx;
 
-    if (target==fallthrough) return;
-
-    if (!_findsuccessorbyostart(opt, opt->currentblk, target, &targetindx) ||
-        !_findsuccessorbyostart(opt, opt->currentblk, fallthrough, &fallthroughindx)) {
-        return;
-    }
+    if (targetindx==BLOCKINDX_EMPTY || fallthroughindx==BLOCKINDX_EMPTY) return;
 
     /* If the branch target is the fallthrough block, rewriting or erasing the
        conditional does not change CFG connectivity. */

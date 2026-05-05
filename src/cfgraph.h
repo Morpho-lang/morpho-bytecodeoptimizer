@@ -16,6 +16,8 @@ DECLARE_VARRAY(instructionindx, instructionindx)
  * ********************************************************************** */
 
 #define INSTRUCTIONINDX_EMPTY -1
+typedef indx blockindx;
+#define BLOCKINDX_EMPTY -1
 
 typedef struct sblock {
     instructionindx start; /** First instruction in the block */
@@ -25,6 +27,8 @@ typedef struct sblock {
     
     dictionary dest; /** Destination blocks */
     dictionary src; /** Source blocks */
+    blockindx branch; /** Branch destination for conditional branches */
+    blockindx fallthrough; /** Fallthrough destination for conditional branches */
     
     dictionary uses; /** Registers that the block uses as input */
     dictionary writes; /** Registers that the block writes to */
@@ -43,7 +47,6 @@ typedef struct sblock {
 DECLARE_VARRAY(block, block);
 
 typedef varray_block cfgraph; 
-typedef indx blockindx;
 
 /* **********************************************************************
  * Interface

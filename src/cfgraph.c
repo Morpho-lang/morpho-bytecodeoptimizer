@@ -23,6 +23,8 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
     b->end=INSTRUCTIONINDX_EMPTY;
     b->func=func;
     b->isentry=false;
+    b->branch=BLOCKINDX_EMPTY;
+    b->fallthrough=BLOCKINDX_EMPTY;
     
     reginfolist_init(&b->rout, func->nregs);
     
@@ -133,6 +135,8 @@ bool cfgraph_disconnect(block *src, blockindx dst, cfgraph *graph) {
     if (!cfgraph_findindx(graph, src, &srcindx)) return false;
 
     success = dictionary_remove(&src->dest, MORPHO_INTEGER(dst));
+    if (src->branch==dst) src->branch=BLOCKINDX_EMPTY;
+    if (src->fallthrough==dst) src->fallthrough=BLOCKINDX_EMPTY;
     if (cfgraph_indx(graph, dst, &dest)) {
         success = dictionary_remove(&dest->src, MORPHO_INTEGER(srcindx)) || success;
     }
@@ -557,6 +561,7 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
         instructionindx dest = blk->end+1+DECODE_sBx(instr);
         if (cfgraph_findblockindx(bld->out, dest, &bindx)) {
             cfgraph_connect(blk, bindx, dest, bld->out);
+            if (flags & OPCODE_NEWBLOCKAFTER) blk->branch=bindx;
         }
         
         if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
@@ -569,6 +574,7 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
     // Link to following block
     if (cfgraph_findblockindx(bld->out, blk->end+1, &bindx)) {
         cfgraph_connect(blk, bindx, blk->end+1, bld->out);
+        if (flags & OPCODE_NEWBLOCKAFTER) blk->fallthrough=bindx;
     }
 }
 
