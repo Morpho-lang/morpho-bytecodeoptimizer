@@ -104,5 +104,8 @@ void optimize_disassemble(optimizer *opt);
 bool optimize_isused(optimizer *opt, registerindx rindx);
 bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx rindx);
+bool optimize_blockisunreachable(block *blk);
+void optimize_repairerasedconditionalbranch(optimizer *opt, instruction instr);
+void optimize_repairtakenconditionalbranch(optimizer *opt, instruction instr);
 
 #endif

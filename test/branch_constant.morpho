@@ -1,0 +1,12 @@
+import bytecodeoptimizer
+
+{
+    var x = 1
+    var y = x
+
+    if (y < 2) {
+        print 0
+    } else {
+        print 1
+    }
+}

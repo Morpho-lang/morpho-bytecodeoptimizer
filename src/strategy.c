@@ -220,6 +220,42 @@ bool strategy_dead_store_elimination(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Constant branch elimination
+ * ------------------------------------- */
+
+static bool _constantbranchcondition(optimizer *opt, instruction instr, bool *out) {
+    indx kindx;
+    CHECK(optimize_findconstant(opt, DECODE_A(instr), &kindx));
+
+    value konst = optimize_getconstant(opt, kindx);
+    CHECK(MORPHO_ISBOOL(konst));
+
+    if (out) *out = MORPHO_GETBOOLVALUE(konst);
+
+    return true;
+}
+
+bool strategy_constant_branch_elimination(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    instruction op = DECODE_OP(instr);
+    bool condition;
+
+    CHECK(op==OP_BIF || op==OP_BIFF);
+    CHECK(_constantbranchcondition(opt, instr, &condition));
+
+    bool branchtaken = ((op==OP_BIF) ? condition : !condition);
+    if (!branchtaken) {
+        optimize_repairerasedconditionalbranch(opt, instr);
+        optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+        return true;
+    }
+
+    optimize_repairtakenconditionalbranch(opt, instr);
+    optimize_replaceinstruction(opt, ENCODE_LONG(OP_B, 0, DECODE_sBx(instr)));
+    return true;
+}
+
+/* -------------------------------------
  * Constant Immutable Constructor
  * ------------------------------------- */
 
@@ -461,6 +497,8 @@ optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_dead_store_elimination,           0 },
     { OP_ANY,  strategy_register_replacement,             0 },
     { OP_MOV,  strategy_self_copy_elimination,            0 },
+    { OP_BIF,  strategy_constant_branch_elimination,      0 },
+    { OP_BIFF, strategy_constant_branch_elimination,      0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
     { OP_LCT,  strategy_duplicate_load,                   0 },
     { OP_LGL,  strategy_duplicate_load,                   0 },

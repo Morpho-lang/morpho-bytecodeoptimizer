@@ -35,6 +35,8 @@ Some optimizations on these are possible, but require the optimizer to check for
 
 * Replace mov of a shadowed register with the original register.
 
+* Range in for..in elimination.
+
 ## Outstanding bugs
 
 * Resolve cycles in register cross-references [causes a stack overflow]
@@ -108,3 +110,68 @@ Some optimizations on these are possible, but require the optimizer to check for
     Filament            2.42     2.84    
     ListLookup          0.4      1.2     
     MethodLookup        0.39     0.5     
+
+
+    =====
+
+    . Finish the cheap local wins.
+Do branch elimination here, especially constant-condition bif/biff, algebraic identities, compare-then-branch simplification, and cleanup of redundant loads/moves. This gives immediate wins and also reduces noise before harder analyses.
+
+2. Fix inter-block propagation as a real dataflow pass.
+This is the structural step. Without it, anything loop-related or path-sensitive will stay weak. I would make this a forward fixpoint analysis over the CFG for:
+• register contents
+• exact types
+• constant values where safe
+• simple copy facts
+
+3. Add targeted inter-procedural propagation, but keep it narrow at first.
+I would not jump straight to broad IPA. Start with:
+• direct known callees only
+• propagate argument types into callee entry state
+• compute a summary per function: return type, side effects, maybe small purity/class facts
+-Yes. That sequence is sensible.
+
+I’d phrase it a bit more tightly as:
+
+1. Finish the cheap local canonicalizations.
+This gives immediate wins and simplifies later analyses. That includes:
+• algebraic identities
+• constant conditional branch elimination
+• unreachable block cleanup
+• jump threading / empty block removal
+• cleanup around mov and repeated lct
+
+This stage should also normalize bytecode shape so later passes see fewer variants.
+
+2. Replace the current inter-block propagation with a real fixpoint dataflow pass.
+That is the real foundation. Until this is done, the optimizer will keep losing facts at joins and loops. I would make this cover:
+• register contents
+• exact constant values where possible
+• exact types where possible
+• induction-variable style facts if you want loop optimizations soon after
+
+3. Add interprocedural propagation and specialization.
+This is where call-site information starts to matter. The highest-value first step is not full general IPA, but:
+• identify direct constant callees
+• push known argument types into callee analysis
+• possibly clone/specialize small functions by argument type shape
+• then inline selectively
+
+That gets you most of the benefit without needing a whole-program theorem prover.
+
+4. Add domain-specific reductions like Range lowering.
+At that point the infrastructure is finally strong enough to do it cleanly. Range reduction will depend on:
+• stable type facts across blocks
+• call-site/callee understanding for enumerate
+• loop-shape recognition
+
+So it belongs after 2 and alongside or after 3.
+
+The only change I’d suggest is that branch elimination should not just be “peephole.” Once you have even modest constant propagation across blocks, branch folding becomes much stronger. So stage 1 can do the obvious local cases, but the serious version should be revisited after stage 2.
+
+So the practical roadmap is:
+
+1. Cheap local simplifications and CFG cleanup.
+2. Proper inter-block dataflow to fixpoint.
+3. Interprocedural type propagation and specialization/inlining.
+4. High-level reductions like Range loop lowering.

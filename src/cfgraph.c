@@ -498,6 +498,25 @@ void cfgraphbuilder_setsrc(cfgraphbuilder *bld, instructionindx dest, blockindx 
     if (cfgraph_findblock(bld->out, dest, &blk)) block_setsource(blk, src);
 }
 
+static void cfgraphbuilder_setbranchtabledest(cfgraphbuilder *bld, block *blk, blockindx src, indx kindx) {
+    value target = blk->func->konst.data[kindx];
+
+    if (MORPHO_ISDICTIONARY(target)) {
+        dictionary *dict = &MORPHO_GETDICTIONARY(target)->dict;
+
+        for (int i=0; i<dict->capacity; i++) {
+            if (!MORPHO_ISNIL(dict->contents[i].key) &&
+                MORPHO_ISINTEGER(dict->contents[i].val)) {
+                instructionindx dest = MORPHO_GETINTEGERVALUE(dict->contents[i].val);
+                blockindx bindx;
+
+                if (cfgraph_findblockindx(bld->out, dest, &bindx)) block_setdest(blk, bindx);
+                cfgraphbuilder_setsrc(bld, dest, src);
+            }
+        }
+    }
+}
+
 /** Determines the destination blocks for a given block  */
 void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
     block *blk = &bld->out->data[blkindx];
@@ -515,6 +534,10 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
         cfgraphbuilder_setsrc(bld, dest, blkindx);
         
         if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
+    }
+
+    if (flags & OPCODE_BRANCH_TABLE) {
+        cfgraphbuilder_setbranchtabledest(bld, blk, blkindx, DECODE_Bx(instr));
     }
     
     // Link to following block

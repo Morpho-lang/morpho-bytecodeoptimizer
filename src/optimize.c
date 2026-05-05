@@ -447,6 +447,86 @@ void optimize_disassemble(optimizer *opt) {
     printf("\n");
 }
 
+static bool _removedictedge(dictionary *dict, blockindx bindx) {
+    for (int i=0; i<dict->capacity; i++) {
+        if (MORPHO_ISINTEGER(dict->contents[i].key) &&
+            MORPHO_GETINTEGERVALUE(dict->contents[i].key)==bindx) {
+            dict->contents[i].key = MORPHO_NIL;
+            dict->contents[i].val = MORPHO_NIL;
+            if (dict->count>0) dict->count--;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool optimize_blockisunreachable(block *blk) {
+    return (!block_isentry(blk) && blk->src.count==0);
+}
+
+static void _pruneunreachableblock(optimizer *opt, blockindx blkindx) {
+    block *blk;
+    if (!cfgraph_indx(&opt->graph, blkindx, &blk) ||
+        !optimize_blockisunreachable(blk)) return;
+
+    for (int i=0; i<blk->dest.capacity; i++) {
+        value key = blk->dest.contents[i].key;
+        if (!MORPHO_ISINTEGER(key)) continue;
+
+        blockindx destindx = MORPHO_GETINTEGERVALUE(key);
+        block *destblk;
+        if (cfgraph_indx(&opt->graph, destindx, &destblk)) {
+            _removedictedge(&destblk->src, blkindx);
+            _pruneunreachableblock(opt, destindx);
+        }
+    }
+}
+
+void optimize_repairerasedconditionalbranch(optimizer *opt, instruction instr) {
+    blockindx srcindx, targetindx, fallthroughindx;
+    instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
+    instructionindx fallthrough = opt->pc + 1;
+
+    if (!cfgraph_findindx(&opt->graph, opt->currentblk, &srcindx) ||
+        !cfgraph_findblockindx(&opt->graph, target, &targetindx)) return;
+
+    /* If the branch target is the fallthrough block, erasing the conditional
+       does not remove any CFG edge. */
+    if (cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx) &&
+        fallthroughindx==targetindx) return;
+
+    _removedictedge(&opt->currentblk->dest, targetindx);
+
+    block *targetblk;
+    if (cfgraph_indx(&opt->graph, targetindx, &targetblk) &&
+        _removedictedge(&targetblk->src, srcindx)) {
+        _pruneunreachableblock(opt, targetindx);
+    }
+}
+
+void optimize_repairtakenconditionalbranch(optimizer *opt, instruction instr) {
+    blockindx srcindx, targetindx, fallthroughindx;
+    instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
+    instructionindx fallthrough = opt->pc + 1;
+
+    if (!cfgraph_findindx(&opt->graph, opt->currentblk, &srcindx) ||
+        !cfgraph_findblockindx(&opt->graph, target, &targetindx) ||
+        !cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx)) return;
+
+    /* If the branch target is the fallthrough block, the conditional is
+       equivalent to a no-op and should not change CFG connectivity. */
+    if (targetindx==fallthroughindx) return;
+
+    _removedictedge(&opt->currentblk->dest, fallthroughindx);
+
+    block *fallthroughblk;
+    if (cfgraph_indx(&opt->graph, fallthroughindx, &fallthroughblk) &&
+        _removedictedge(&fallthroughblk->src, srcindx)) {
+        _pruneunreachableblock(opt, fallthroughindx);
+    }
+}
+
 bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary *checked) {
     blockindx blkindx;
     if (!cfgraph_findindx(&opt->graph, blk, &blkindx)) return false;
@@ -832,6 +912,7 @@ void optimize_runprepasses(optimizer *opt) {
 
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
         block *blk = &opt->graph.data[i];
+        if (optimize_blockisunreachable(blk)) continue;
 
         for (instructionindx j=blk->start; j<=blk->end && !optimize_checkerror(opt); j++) {
             instruction instr = optimize_getinstructionat(opt, j);
@@ -856,7 +937,11 @@ void optimize_pass(optimizer *opt, int n) {
     
     opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
-    for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) optimize_block(opt, &opt->graph.data[i]);
+    for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
+        block *blk = &opt->graph.data[i];
+        if (optimize_blockisunreachable(blk)) continue;
+        optimize_block(opt, blk);
+    }
 }
 
 /* **********************************************************************
