@@ -1,0 +1,31 @@
+import bytecodeoptimizer
+
+{
+    fn passthrough(x) {
+        var y = x
+        return y
+    }
+
+    var a = 1
+    var b = a
+    var c = b
+    print c          // should collapse to print a constant/original register
+
+    var lst = [10, 20, 30]
+    var i = 1
+    var j = i
+    var x = lst[j]   // showcases lix A-propagation / copy cleanup
+    print x
+
+    var k = 2
+    var m = k
+    lst[m] = x       // showcases six propagation
+    print lst[2]
+
+    var p = 3
+    var q = p
+    var r = q + 1    // arithmetic propagation
+    print r
+
+    print passthrough(r) // return-operand propagation inside the function
+}

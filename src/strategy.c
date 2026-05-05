@@ -160,23 +160,39 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
 bool strategy_register_replacement(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     instruction op = DECODE_OP(instr);
-    CHECK(op>=OP_ADD && op<=OP_LE || op==OP_LIXL); // Quickly eliminate non-arithmetic instructions
+    opcodeflags flags = opcode_getflags(op);
+    CHECK(flags & OPCODE_PROPAGATE);
     
-    bool success=false;
+    registerindx a=DECODE_A(instr), b=DECODE_B(instr), c=DECODE_C(instr);
+    registerindx na=a, nb=b, nc=c;
     
-    registerindx a=DECODE_A(instr),
-                 b=DECODE_B(instr),
-                 c=DECODE_C(instr);
+    if ((flags & OPCODE_USES_A) &&
+        !(flags & OPCODE_OVERWRITES_A) &&
+        !(flags & OPCODE_OVERWRITES_AP1)) na=optimize_findoriginalregister(opt, a);
+    if (flags & OPCODE_USES_B) nb=optimize_findoriginalregister(opt, b);
+    if (flags & OPCODE_USES_C) nc=optimize_findoriginalregister(opt, c);
     
-    registerindx ob=optimize_findoriginalregister(opt, b);
-    registerindx oc=optimize_findoriginalregister(opt, c);
-    
-    if (ob!=b || oc!=c) {
-        optimize_replaceinstruction(opt, ENCODE(op, a, ob, oc));
-        success=true;
+    if (op==OP_MOV && a==nb) {
+        optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+        return true;
     }
     
-    return success;
+    if (na==a && nb==b && nc==c) return false;
+    optimize_replaceinstruction(opt, ENCODE(op, na, nb, nc));
+    return true;
+}
+
+/* -------------------------------------
+ * Self-copy elimination
+ * ------------------------------------- */
+
+bool strategy_self_copy_elimination(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    
+    if (DECODE_A(instr)!=DECODE_B(instr)) return false;
+    optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+    
+    return true;
 }
 
 /* -------------------------------------
@@ -444,6 +460,7 @@ optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_constant_folding,                 0 },
     { OP_ANY,  strategy_dead_store_elimination,           0 },
     { OP_ANY,  strategy_register_replacement,             0 },
+    { OP_MOV,  strategy_self_copy_elimination,            0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },
     { OP_LCT,  strategy_duplicate_load,                   0 },
     { OP_LGL,  strategy_duplicate_load,                   0 },
