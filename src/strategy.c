@@ -256,6 +256,20 @@ bool strategy_constant_branch_elimination(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Redundant branch elimination
+ * ------------------------------------- */
+
+bool strategy_redundant_branch_elimination(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+
+    CHECK(DECODE_OP(instr)==OP_B);
+    CHECK(DECODE_sBx(instr)==0);
+
+    optimize_replaceinstruction(opt, ENCODE_BYTE(OP_NOP));
+    return true;
+}
+
+/* -------------------------------------
  * Constant Immutable Constructor
  * ------------------------------------- */
 
@@ -498,6 +512,7 @@ optimizationstrategy strategies[] = {
     { OP_ANY,  strategy_dead_store_elimination,           0 },
     { OP_ANY,  strategy_register_replacement,             0 },
     { OP_MOV,  strategy_self_copy_elimination,            0 },
+    { OP_B,    strategy_redundant_branch_elimination,     0 },
     { OP_BIF,  strategy_constant_branch_elimination,      0 },
     { OP_BIFF, strategy_constant_branch_elimination,      0 },
     //{ OP_ANY,  strategy_common_subexpression_elimination, 0 },

@@ -100,9 +100,15 @@ void _fixbrnch(blockcomposer *comp, instruction last, instructionindx newend, bl
     if (dictionary_get(&comp->map, MORPHO_INTEGER(dest), &mapped) &&
         MORPHO_ISINTEGER(mapped) &&
         cfgraph_indx(&comp->outgraph, MORPHO_GETINTEGERVALUE(mapped), &destblk)) {
+        instructionindx offset = destblk->start - newend - 1;
         instruction newinstr = ENCODE_LONG(DECODE_OP(last),
                                            DECODE_A(last),
-                                           destblk->start - newend -1);
+                                           offset);
+
+        if (DECODE_OP(last)==OP_B && offset==0) {
+            newinstr = ENCODE_BYTE(OP_NOP);
+        }
+
         blockcomposer_setinstructionat(comp, newend, newinstr);
     } else {
         UNREACHABLE("Missing block");
