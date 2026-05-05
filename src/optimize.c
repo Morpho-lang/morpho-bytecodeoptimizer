@@ -447,20 +447,6 @@ void optimize_disassemble(optimizer *opt) {
     printf("\n");
 }
 
-static bool _removedictedge(dictionary *dict, blockindx bindx) {
-    for (int i=0; i<dict->capacity; i++) {
-        if (MORPHO_ISINTEGER(dict->contents[i].key) &&
-            MORPHO_GETINTEGERVALUE(dict->contents[i].key)==bindx) {
-            dict->contents[i].key = MORPHO_NIL;
-            dict->contents[i].val = MORPHO_NIL;
-            if (dict->count>0) dict->count--;
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool optimize_blockisunreachable(block *blk) {
     return (!block_isentry(blk) && blk->src.count==0);
 }
@@ -475,56 +461,37 @@ static void _pruneunreachableblock(optimizer *opt, blockindx blkindx) {
         if (!MORPHO_ISINTEGER(key)) continue;
 
         blockindx destindx = MORPHO_GETINTEGERVALUE(key);
-        block *destblk;
-        if (cfgraph_indx(&opt->graph, destindx, &destblk)) {
-            _removedictedge(&destblk->src, blkindx);
+        if (cfgraph_disconnect(blk, destindx, &opt->graph)) {
             _pruneunreachableblock(opt, destindx);
         }
     }
 }
 
-void optimize_repairerasedconditionalbranch(optimizer *opt, instruction instr) {
-    blockindx srcindx, targetindx, fallthroughindx;
+static void _repairconditionalbranch(optimizer *opt, instruction instr, bool removetargetedge) {
+    blockindx targetindx, fallthroughindx;
     instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
     instructionindx fallthrough = opt->pc + 1;
+    blockindx removeindx;
 
-    if (!cfgraph_findindx(&opt->graph, opt->currentblk, &srcindx) ||
-        !cfgraph_findblockindx(&opt->graph, target, &targetindx)) return;
+    if (!cfgraph_findblockindx(&opt->graph, target, &targetindx) ||
+        !cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx)) return;
 
-    /* If the branch target is the fallthrough block, erasing the conditional
-       does not remove any CFG edge. */
-    if (cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx) &&
-        fallthroughindx==targetindx) return;
+    /* If the branch target is the fallthrough block, rewriting or erasing the
+       conditional does not change CFG connectivity. */
+    if (fallthroughindx==targetindx) return;
 
-    _removedictedge(&opt->currentblk->dest, targetindx);
-
-    block *targetblk;
-    if (cfgraph_indx(&opt->graph, targetindx, &targetblk) &&
-        _removedictedge(&targetblk->src, srcindx)) {
-        _pruneunreachableblock(opt, targetindx);
+    removeindx = (removetargetedge ? targetindx : fallthroughindx);
+    if (cfgraph_disconnect(opt->currentblk, removeindx, &opt->graph)) {
+        _pruneunreachableblock(opt, removeindx);
     }
 }
 
+void optimize_repairerasedconditionalbranch(optimizer *opt, instruction instr) {
+    _repairconditionalbranch(opt, instr, true);
+}
+
 void optimize_repairtakenconditionalbranch(optimizer *opt, instruction instr) {
-    blockindx srcindx, targetindx, fallthroughindx;
-    instructionindx target = opt->pc + 1 + DECODE_sBx(instr);
-    instructionindx fallthrough = opt->pc + 1;
-
-    if (!cfgraph_findindx(&opt->graph, opt->currentblk, &srcindx) ||
-        !cfgraph_findblockindx(&opt->graph, target, &targetindx) ||
-        !cfgraph_findblockindx(&opt->graph, fallthrough, &fallthroughindx)) return;
-
-    /* If the branch target is the fallthrough block, the conditional is
-       equivalent to a no-op and should not change CFG connectivity. */
-    if (targetindx==fallthroughindx) return;
-
-    _removedictedge(&opt->currentblk->dest, fallthroughindx);
-
-    block *fallthroughblk;
-    if (cfgraph_indx(&opt->graph, fallthroughindx, &fallthroughblk) &&
-        _removedictedge(&fallthroughblk->src, srcindx)) {
-        _pruneunreachableblock(opt, fallthroughindx);
-    }
+    _repairconditionalbranch(opt, instr, false);
 }
 
 bool _checkdestusage(optimizer *opt, block *blk, registerindx rindx, dictionary *checked) {

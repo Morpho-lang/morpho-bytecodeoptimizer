@@ -115,6 +115,31 @@ void block_setdest(block *b, blockindx indx) {
     dictionary_insert(&b->dest, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
+bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph) {
+    block *dest;
+
+    if (!cfgraph_indx(graph, dst, &dest) || dest->start!=dststart) return false;
+
+    block_setdest(src, dst);
+    block_setsource(dest, (blockindx) (src - graph->data));
+    return true;
+}
+
+bool cfgraph_disconnect(block *src, blockindx dst, cfgraph *graph) {
+    block *dest;
+    blockindx srcindx;
+    bool success=false;
+
+    if (!cfgraph_findindx(graph, src, &srcindx)) return false;
+
+    success = dictionary_remove(&src->dest, MORPHO_INTEGER(dst));
+    if (cfgraph_indx(graph, dst, &dest)) {
+        success = dictionary_remove(&dest->src, MORPHO_INTEGER(srcindx)) || success;
+    }
+
+    return success;
+}
+
 /** Determines of a block is the entry point of the function */
 bool block_isentry(block *b) {
     return b->isentry;
@@ -510,8 +535,9 @@ static void cfgraphbuilder_setbranchtabledest(cfgraphbuilder *bld, block *blk, b
                 instructionindx dest = MORPHO_GETINTEGERVALUE(dict->contents[i].val);
                 blockindx bindx;
 
-                if (cfgraph_findblockindx(bld->out, dest, &bindx)) block_setdest(blk, bindx);
-                cfgraphbuilder_setsrc(bld, dest, src);
+                if (cfgraph_findblockindx(bld->out, dest, &bindx)) {
+                    cfgraph_connect(blk, bindx, dest, bld->out);
+                }
             }
         }
     }
@@ -529,9 +555,9 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
     
     if (flags & OPCODE_BRANCH) {
         instructionindx dest = blk->end+1+DECODE_sBx(instr);
-        if (cfgraph_findblockindx(bld->out, dest, &bindx)) block_setdest(blk, bindx);
-        
-        cfgraphbuilder_setsrc(bld, dest, blkindx);
+        if (cfgraph_findblockindx(bld->out, dest, &bindx)) {
+            cfgraph_connect(blk, bindx, dest, bld->out);
+        }
         
         if (!(flags & OPCODE_NEWBLOCKAFTER)) return; // Unconditional branches link only to their dest
     }
@@ -541,9 +567,9 @@ void cfgraphbuilder_blockdest(cfgraphbuilder *bld, blockindx blkindx) {
     }
     
     // Link to following block
-    if (cfgraph_findblockindx(bld->out, blk->end+1, &bindx)) block_setdest(blk, bindx);
-    
-    cfgraphbuilder_setsrc(bld, blk->end+1, blkindx);
+    if (cfgraph_findblockindx(bld->out, blk->end+1, &bindx)) {
+        cfgraph_connect(blk, bindx, blk->end+1, bld->out);
+    }
 }
 
 void cfgraphbuilder_identifysources(cfgraphbuilder *bld) {

@@ -62,6 +62,8 @@ void block_computeusage(block *blk, instruction *ilist);
 
 void block_setsource(block *b, blockindx indx);
 void block_setdest(block *b, blockindx indx);
+bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph);
+bool cfgraph_disconnect(block *src, blockindx dst, cfgraph *graph);
 
 bool block_isentry(block *b);
 

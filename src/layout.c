@@ -287,12 +287,6 @@ bool annotationfixer_atend(annotationfixer *fix) {
     return !(fix->aindx < fix->in->annotations.count);
 }
 
-/** Gets the instruction at a given index */
-instruction annotationfixer_getinstructionat(annotationfixer *fix, instructionindx i) {
-    if (i>=fix->in->code.count) return ENCODE_BYTE(OP_NOP);
-    return fix->in->code.data[i];
-}
-
 /** Count the number of nops between two instructions */
 int annotationfixer_countnops(annotationfixer *fix, instructionindx start, int ninstr) {
     if (start>=fix->in->code.count) return ninstr;
@@ -301,7 +295,7 @@ int annotationfixer_countnops(annotationfixer *fix, instructionindx start, int n
     instructionindx end = start+ninstr;
     if (end>fix->in->code.count) end=fix->in->code.count;
     for (instructionindx i=start; i<end; i++) {
-        instruction instr = annotationfixer_getinstructionat(fix, i);
+        instruction instr = fix->in->code.data[i];
         if (DECODE_OP(instr)==OP_NOP) count++;
     }
 
@@ -313,7 +307,6 @@ int annotationfixer_countnops(annotationfixer *fix, instructionindx start, int n
 void layout_fixannotations(optimizer *opt) {
     annotationfixer fix;
     annotationfixer_init(&fix, opt->prog);
-    int ntotal = 0;
     
     if (opt->verbose) {
         printf("===Fixing annotations\nOld annotations:\n");
@@ -335,8 +328,6 @@ void layout_fixannotations(optimizer *opt) {
                 new.content.element.ninstr = ninstr;
                 varray_debugannotationadd(&fix.out, &new, 1);
             }
-            
-            ntotal += ninstr;
         } else { // Copy across non element records
             varray_debugannotationadd(&fix.out, ann, 1);
         }
