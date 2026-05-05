@@ -1,5 +1,7 @@
 // Swap elements of an array
 
+import bytecodeoptimizer
+
 fn swap(x, i, j) {
     var tmp=x[i]
     x[i]=x[j]
