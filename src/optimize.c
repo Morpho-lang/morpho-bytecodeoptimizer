@@ -482,6 +482,7 @@ bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx) {
 
 static bool _isdeadstoresafearithmetictype(value type) {
     return (MORPHO_ISEQUAL(type, typeint) ||
+            MORPHO_ISEQUAL(type, typefloat));
 }
 
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx r) {

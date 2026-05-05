@@ -138,7 +138,6 @@ def doTest(file,testLog,CI):
         # Was it expected?
         if(expected==out):
             if not CI:
-                print(file+":", end=" ")
                 print(stylize("Passed",colored.fg("green")))
             ret = 1
         else:
@@ -175,8 +174,16 @@ def doTest(file,testLog,CI):
     return ret
 
 def test(file,testLog,CI):
-    # Prepend the bytecodeoptimizer import
-    os.system("sed -i.old '1s;^;import bytecodeoptimizer\\n;' " + file)
+    # Insert the bytecodeoptimizer import after any leading shebang.
+    with open(file, 'r') as source:
+        lines = source.readlines()
+
+    insert_at = 1 if lines and lines[0].startswith('#!') else 0
+    if len(lines) <= insert_at or lines[insert_at] != 'import bytecodeoptimizer\n':
+        lines.insert(insert_at, 'import bytecodeoptimizer\n')
+
+    with open(file, 'w') as source:
+        source.writelines(lines)
 
     # Actually run the test 
     return doTest(file,testLog,CI)

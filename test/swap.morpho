@@ -1,0 +1,12 @@
+// Swap elements of an array
+
+fn swap(x, i, j) {
+    var tmp=x[i]
+    x[i]=x[j]
+    x[j]=tmp
+}
+
+var a = [1, 2, 3, 4]
+swap(a, 0, 2)
+
+print a // expect: [3, 2, 1, 4]
