@@ -100,7 +100,6 @@ bool strategy_constant_folding(optimizer *opt) {
     // Evaluate the program
     value new = MORPHO_NIL;
     if (!optimize_evalsubprogram(opt, ilist, 0, &new)) {
-        optimize_error(opt, ERROR_ALLOCATIONFAILED);
         return false;
     }
     
@@ -626,8 +625,10 @@ bool strategy_optimizeinstruction(optimizer *opt, int maxlevel) {
         if ((strategies[i].match==op ||
              strategies[i].match==OP_ANY) &&
              strategies[i].level <= maxlevel) {
-            
-            if ((strategies[i].fn) (opt)) return true; // Terminate if the strategy function succeeds
+            bool success = (strategies[i].fn) (opt);
+            if (optimize_checkerror(opt) && opt->verbose)
+                printf("Strategy error at instruction %ti (errcat=%i)\n", optimize_getinstructionindx(opt), opt->err.cat);
+            if (success) return true; // Terminate if the strategy function succeeds
         }
     }
     
