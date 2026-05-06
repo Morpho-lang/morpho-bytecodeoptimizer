@@ -721,74 +721,38 @@ void optimize_signature(optimizer *opt) {
     }
 }
 
-/* Todo: Remove dead function v */
-void _copy(reginfolist *src, reginfolist *dest) {
-    for (int i=0; i<src->nreg; i++) {
-        if (dest->rinfo[i].contents==REG_EMPTY) { // If empty, just copy across the info from src
-            dest->rinfo[i]=src->rinfo[i];
-        } else {
-            if (src->rinfo[i].contents!=dest->rinfo[i].contents) { // If the content is different set to value
-                dest->rinfo[i].contents=REG_VALUE;
-            } else if ((src->rinfo[i].contents==REG_GLOBAL || // Ensure if the contents have an index that it's the same
-                       src->rinfo[i].contents==REG_CONSTANT ||
-                       src->rinfo[i].contents==REG_UPVALUE ||
-                       src->rinfo[i].contents==REG_REGISTER) &&
-                       src->rinfo[i].indx!=dest->rinfo[i].indx) {
-                dest->rinfo[i].contents=REG_VALUE;
-            }
-            
-            // Ensure types match if present
-            if (!MORPHO_ISEQUAL(src->rinfo[i].type,dest->rinfo[i].type)) dest->rinfo[i].type=MORPHO_NIL;
-        }
-    }
-}
-
-bool _isparam(int n, block **src, int i) {
+static bool _isparam(int n, block **src, int i) {
     for (int k=0; k<n; k++) if (src[k]->rout.rinfo[i].contents==REG_PARAMETER) return true;
     return false;
 }
 
-bool _isequal(reginfo *a, reginfo *b) {
-    if (a->contents!=b->contents) return false;
-    if ((a->contents==REG_GLOBAL ||
-         a->contents==REG_UPVALUE ||
-         a->contents==REG_CONSTANT ||
-         a->contents==REG_REGISTER) && a->indx!=b->indx) return false;
-    return true;
-}
-
-void _determinecontents(int n, block **src, int i, reginfo *out) {
-    reginfo info;
-    if (n>0) info=src[0]->rout.rinfo[i];
-    
-    for (int k=0; k<n; k++) {
-        if (!_isequal(&info, &src[k]->rout.rinfo[i])) return;
-    }
-    
-    // Don't copy register tracking between blocks if there's more than one source
-    // TODO: this seemed to cause problems. Is there a way to do so safely?
-    if (n>1 && info.contents==REG_REGISTER) info.contents=REG_VALUE;
-    
-    if (info.contents!=REG_EMPTY) *out = info;
-}
-
-value _determinetype(int n, block **src, int i) {
-    value type;
-    if (n>0) type=src[0]->rout.rinfo[i].type;
-    
-    for (int k=1; k<n; k++) {
-        if (!MORPHO_ISEQUAL(src[k]->rout.rinfo[i].type, type)) return MORPHO_NIL;
-    }
-    return type;
-}
-
-void _resolve(int n, block **src, reginfolist *dest) {
+static void _resolve(int n, block **src, reginfolist *dest) {
     for (int i=0; i<dest->nreg; i++) {
         if (_isparam(n, src, i)) continue;
-        _determinecontents(n, src, i, &dest->rinfo[i]);
-        
-        value type=_determinetype(n, src, i);
-        reginfolist_settype(dest, i, type);
+
+        reginfo joined = src[0]->rout.rinfo[i];
+        joined.nread=0;
+        joined.nwrite=0;
+        joined.ndup=0;
+        if (joined.contents==REG_EMPTY || joined.contents==REG_VALUE) {
+            joined.indx=0;
+            joined.iindx=INSTRUCTIONINDX_EMPTY;
+        }
+        if (MORPHO_ISNIL(joined.type)) joined.typeinfo=REGTYPE_UNKNOWN;
+
+        for (int k=1; k<n; k++) {
+            reginfo_join(&joined, &src[k]->rout.rinfo[i]);
+        }
+
+        // Register aliases are not stable across block boundaries because restore/join
+        // does not preserve the duplication bookkeeping needed to repair them.
+        if (joined.contents==REG_REGISTER) {
+            joined.contents=REG_VALUE;
+            joined.indx=0;
+            joined.iindx=INSTRUCTIONINDX_EMPTY;
+        }
+
+        dest->rinfo[i]=joined;
     }
 }
 

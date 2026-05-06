@@ -28,8 +28,7 @@ typedef enum {
 typedef enum {
     REGTYPE_UNKNOWN, /** No type information */
     REGTYPE_EXACT,   /** Register definitely has this type */
-    REGTYPE_SUBTYPE, /** Register has this type or a child type */
-    REGTYPE_AMBIGUOUS /** Register may hold values of multiple types */
+    REGTYPE_SUBTYPE /** Register has this type or a child type */
 } regtypeinfo;
 
 /** Record information about each register */
@@ -59,6 +58,7 @@ void reginfolist_init(reginfolist *rlist, int nreg);
 void reginfolist_clear(reginfolist *rlist);
 void reginfolist_wipe(reginfolist *rlist, int nreg);
 bool reginfolist_copy(reginfolist *src, reginfolist *dest);
+void reginfo_join(reginfo *dest, reginfo *src);
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx);
 void reginfolist_settype(reginfolist *rlist, int rindx, value type);
 void reginfolist_settypeinfo(reginfolist *rlist, int rindx, value type, regtypeinfo info);

@@ -45,6 +45,64 @@ bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
     return true;
 }
 
+static bool reginfo_hasindexedcontents(regcontents contents) {
+    return (contents==REG_GLOBAL ||
+            contents==REG_UPVALUE ||
+            contents==REG_CONSTANT ||
+            contents==REG_REGISTER);
+}
+
+static void reginfo_clearsource(reginfo *info) {
+    info->indx=0;
+    info->iindx=INSTRUCTIONINDX_EMPTY;
+}
+
+static void reginfo_normalize(reginfo *info) {
+    info->nread=0;
+    info->nwrite=0;
+    info->ndup=0;
+
+    if (info->contents==REG_EMPTY || info->contents==REG_VALUE) {
+        reginfo_clearsource(info);
+    }
+
+    if (MORPHO_ISNIL(info->type)) info->typeinfo=REGTYPE_UNKNOWN;
+}
+
+/** Joins register information from one predecessor into another. */
+void reginfo_join(reginfo *dest, reginfo *src) {
+    reginfo_normalize(dest);
+
+    if (dest->contents==REG_EMPTY) {
+        if (src->contents!=REG_EMPTY) {
+            dest->contents=REG_VALUE;
+            reginfo_clearsource(dest);
+        }
+    } else if (src->contents==REG_EMPTY) {
+        dest->contents=REG_VALUE;
+        reginfo_clearsource(dest);
+    } else if (dest->contents!=src->contents ||
+               (reginfo_hasindexedcontents(dest->contents) && dest->indx!=src->indx)) {
+        dest->contents=REG_VALUE;
+        reginfo_clearsource(dest);
+    } else if (dest->contents==REG_VALUE) {
+        reginfo_clearsource(dest);
+    } else if (dest->iindx!=src->iindx) {
+        dest->iindx=INSTRUCTIONINDX_EMPTY;
+    }
+
+    if (MORPHO_ISNIL(dest->type) ||
+        MORPHO_ISNIL(src->type) ||
+        !MORPHO_ISEQUAL(dest->type, src->type)) {
+        dest->type=MORPHO_NIL;
+        dest->typeinfo=REGTYPE_UNKNOWN;
+    } else if (src->typeinfo>dest->typeinfo) {
+        dest->typeinfo=src->typeinfo;
+    }
+
+    reginfo_normalize(dest);
+}
+
 /** Adds one to the read counter for register i */
 void reginfolist_incread(reginfolist *rlist, int rindx) {
     if (rindx>=rlist->nreg) return;
@@ -206,7 +264,6 @@ void reginfolist_show(reginfolist *rlist) {
             printf(" ");
             if (rlist->rinfo[i].typeinfo==REGTYPE_EXACT) printf("=:");
             if (rlist->rinfo[i].typeinfo==REGTYPE_SUBTYPE) printf("<:");
-            if (rlist->rinfo[i].typeinfo==REGTYPE_AMBIGUOUS) printf("?:");
             morpho_printvalue(NULL, rlist->rinfo[i].type);
         }
         
