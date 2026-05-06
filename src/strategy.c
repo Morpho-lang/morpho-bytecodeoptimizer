@@ -525,7 +525,7 @@ bool strategy_method_resolution(optimizer *opt) {
     
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
         optimize_isconstant(opt, DECODE_A(instr), &kindx) &&
-        optimize_hasexacttype(opt, receiver)) {
+        optimize_hasuniquetype(opt, receiver)) {
         
         objectclass *klass = MORPHO_GETCLASS(type);
         value label = optimize_getconstant(opt, kindx);
