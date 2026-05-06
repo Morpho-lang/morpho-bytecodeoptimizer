@@ -248,6 +248,12 @@ bool optimize_hasuniquetype(optimizer *opt, registerindx r) {
     return (MORPHO_GETCLASS(type)->children.count==0);
 }
 
+/** Checks if a register has an exact type fact. */
+bool optimize_hasexacttype(optimizer *opt, registerindx r) {
+    return (optimize_typeinfo(opt, r)==REGTYPE_EXACT &&
+            !MORPHO_ISNIL(optimize_type(opt, r)));
+}
+
 /** Checks if a register is overwritten between start and the current instruction */
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {

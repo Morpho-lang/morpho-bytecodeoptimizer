@@ -13,6 +13,7 @@ static void reginfo_clearsource(reginfo *info);
 static void reginfo_clearalias(reginfo *info);
 static void reginfo_generalize(reginfo *info);
 static void reginfo_normalize(reginfo *info);
+static void reginfo_jointype(reginfo *joined, reginfo *incoming);
 static void regusage_merge(regusage *dest, regusage src);
 static bool regusage_hasread(regusage usage);
 static bool regusage_haswrite(regusage usage);
@@ -112,6 +113,34 @@ static void reginfo_normalize(reginfo *info) {
     }
 }
 
+/** Joins type information while allowing subtype-compatible facts to survive. */
+static void reginfo_jointype(reginfo *joined, reginfo *incoming) {
+    if (MORPHO_ISNIL(joined->type) || MORPHO_ISNIL(incoming->type)) {
+        joined->type=MORPHO_NIL;
+        joined->typeinfo=REGTYPE_UNKNOWN;
+        return;
+    }
+
+    if (MORPHO_ISEQUAL(joined->type, incoming->type)) {
+        if (incoming->typeinfo>joined->typeinfo) joined->typeinfo=incoming->typeinfo;
+        return;
+    }
+
+    if (value_typematch(joined->type, incoming->type)) {
+        joined->typeinfo=REGTYPE_SUBTYPE;
+        return;
+    }
+
+    if (value_typematch(incoming->type, joined->type)) {
+        joined->type=incoming->type;
+        joined->typeinfo=REGTYPE_SUBTYPE;
+        return;
+    }
+
+    joined->type=MORPHO_NIL;
+    joined->typeinfo=REGTYPE_UNKNOWN;
+}
+
 static void regusage_merge(regusage *dest, regusage src) {
     if (*dest==src) return;
     if (*dest==REGUSE_NONE) {
@@ -153,14 +182,7 @@ void reginfo_join(reginfo *dest, reginfo *src) {
         joined.iindx=INSTRUCTIONINDX_EMPTY;
     }
 
-    if (MORPHO_ISNIL(joined.type) ||
-        MORPHO_ISNIL(incoming.type) ||
-        !MORPHO_ISEQUAL(joined.type, incoming.type)) {
-        joined.type=MORPHO_NIL;
-        joined.typeinfo=REGTYPE_UNKNOWN;
-    } else if (incoming.typeinfo>joined.typeinfo) {
-        joined.typeinfo=incoming.typeinfo;
-    }
+    reginfo_jointype(&joined, &incoming);
 
     if (!(joined.hasalias && incoming.hasalias && joined.alias==incoming.alias)) {
         reginfo_clearalias(&joined);

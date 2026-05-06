@@ -53,12 +53,16 @@ bool strategy_duplicate_load(optimizer *opt) {
     
     registerindx a = DECODE_A(instr);
     indx cindx = DECODE_Bx(instr);
+    block *blk = optimize_currentblock(opt);
     
     for (registerindx i=0; i<opt->rlist.nreg; i++) {
         regcontents icontents;
         indx iindx;
+        instructionindx srcindx;
         
         if (optimize_contents(opt, i, &icontents, &iindx) &&
+            optimize_source(opt, i, &srcindx) &&
+            block_contains(blk, srcindx) &&
             icontents==contents &&
             cindx==iindx) {
          
@@ -521,7 +525,7 @@ bool strategy_method_resolution(optimizer *opt) {
     
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
         optimize_isconstant(opt, DECODE_A(instr), &kindx) &&
-        optimize_hasuniquetype(opt, receiver)) {
+        optimize_hasexacttype(opt, receiver)) {
         
         objectclass *klass = MORPHO_GETCLASS(type);
         value label = optimize_getconstant(opt, kindx);
@@ -609,7 +613,7 @@ bool strategy_metafunction_reduction(optimizer *opt) {
     for (registerindx i=0; i<nargs; i++) {
         registerindx r = rA + i + (isMethod ? 2 : 1);
         value type = optimize_type(opt, r);
-        if (!optimize_hasuniquetype(opt, r)) type=MORPHO_NIL;
+        if (!optimize_hasexacttype(opt, r)) type=MORPHO_NIL;
 
         types[i]=type;
     }
