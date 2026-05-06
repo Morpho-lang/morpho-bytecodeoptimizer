@@ -956,6 +956,8 @@ static void optimize_transferblock(optimizer *opt, block *blk) {
 
 /** Enqueues reachable successor blocks when a block's output facts change. */
 static void optimize_queuesuccessors(optimizer *opt, block *blk, varray_instructionindx *worklist) {
+    bool printed=false;
+
     for (int i=0; i<blk->dest.capacity; i++) {
         value key = blk->dest.contents[i].key;
         block *dest;
@@ -964,9 +966,18 @@ static void optimize_queuesuccessors(optimizer *opt, block *blk, varray_instruct
         if (!MORPHO_ISINTEGER(key)) continue;
         bindx = MORPHO_GETINTEGERVALUE(key);
         if (cfgraph_indx(&opt->graph, bindx, &dest) && optimize_blockisreachable(opt, dest)) {
+            if (opt->verbose) {
+                if (!printed) {
+                    printf("  queue [%ti, %ti] ->", blk->start, blk->end);
+                    printed=true;
+                }
+                printf(" [%ti, %ti]", dest->start, dest->end);
+            }
             varray_instructionindxwrite(worklist, bindx);
         }
     }
+
+    if (printed) printf("\n");
 }
 
 /** Runs inter-block dataflow until block input and output facts converge. */
@@ -974,29 +985,57 @@ static void optimize_dataflow(optimizer *opt) {
     varray_instructionindx worklist;
     varray_instructionindxinit(&worklist);
 
+    if (opt->verbose) printf("===Dataflow===\n");
+
     for (blockindx i=0; i<opt->graph.count; i++) { // Add entry points
-        if (block_isentry(&opt->graph.data[i])) varray_instructionindxwrite(&worklist, i);
+        if (block_isentry(&opt->graph.data[i])) {
+            if (opt->verbose) {
+                block *blk = &opt->graph.data[i];
+                printf("Seed block [%ti, %ti]\n", blk->start, blk->end);
+            }
+            varray_instructionindxwrite(&worklist, i);
+        }
     }
 
     while (worklist.count>0 && !optimize_checkerror(opt)) {
         instructionindx indx;
         varray_instructionindxpop(&worklist, &indx);
         block *blk;
-        reginfolist oldrout;
-        bool changed;
+        reginfolist oldrin, oldrout;
+        bool rinchanged, routchanged;
 
         if (!cfgraph_indx(&opt->graph, indx, &blk)) continue;
         if (!optimize_blockisreachable(opt, blk)) continue;
 
+        reginfolist_init(&oldrin, blk->func->nregs);
         reginfolist_init(&oldrout, blk->func->nregs);
+        reginfolist_copy(&blk->rin, &oldrin);
         reginfolist_copy(&blk->rout, &oldrout);
 
         optimize_transferblock(opt, blk);
-        changed = !reginfolist_equal(&oldrout, &blk->rout);
+        rinchanged = !reginfolist_equal(&oldrin, &blk->rin);
+        routchanged = !reginfolist_equal(&oldrout, &blk->rout);
 
+        if (opt->verbose) {
+            printf("Visit block [%ti, %ti] rin=%s rout=%s\n", blk->start, blk->end,
+                   rinchanged ? "changed" : "same",
+                   routchanged ? "changed" : "same");
+            if (rinchanged) {
+                printf("  rin old/new:\n");
+                reginfolist_show(&oldrin);
+                reginfolist_show(&blk->rin);
+            }
+            if (routchanged) {
+                printf("  rout old/new:\n");
+                reginfolist_show(&oldrout);
+                reginfolist_show(&blk->rout);
+            }
+        }
+
+        reginfolist_clear(&oldrin);
         reginfolist_clear(&oldrout);
 
-        if (changed) optimize_queuesuccessors(opt, blk, &worklist);
+        if (routchanged) optimize_queuesuccessors(opt, blk, &worklist);
     }
 
     varray_instructionindxclear(&worklist);
