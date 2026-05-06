@@ -35,6 +35,7 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
     dictionary_init(&b->uses);
     dictionary_init(&b->writes);
     dictionary_init(&b->loopsrc);
+    dictionary_init(&b->loopblocks);
 }
 
 /** Clears a basic block structure */
@@ -47,6 +48,7 @@ void block_clear(block *b) {
     dictionary_clear(&b->dest);
     dictionary_clear(&b->writes);
     dictionary_clear(&b->loopsrc);
+    dictionary_clear(&b->loopblocks);
 }
 
 /* --------------
@@ -125,6 +127,7 @@ void block_setdest(block *b, blockindx indx) {
 /** Clears loop candidate metadata on a block. */
 void block_clearloopinfo(block *b) {
     _wipe(&b->loopsrc);
+    _wipe(&b->loopblocks);
     b->isloopheader=false;
 }
 
@@ -134,9 +137,19 @@ void block_setloopsource(block *b, blockindx indx) {
     dictionary_insert(&b->loopsrc, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
+/** Records that a block participates in a loop headed by this block. */
+void block_setloopblock(block *b, blockindx indx) {
+    dictionary_insert(&b->loopblocks, MORPHO_INTEGER((int) indx), MORPHO_NIL);
+}
+
 /** Determines if a block is a structural loop header candidate. */
 bool block_isloopheader(block *b) {
     return b->isloopheader;
+}
+
+/** Determines if a block is in the loop headed by this block. */
+bool block_inloop(block *b, blockindx indx) {
+    return dictionary_get(&b->loopblocks, MORPHO_INTEGER((int) indx), NULL);
 }
 
 bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph) {
@@ -214,6 +227,7 @@ void cfgraph_show(cfgraph *graph) {
         _cfgraph_printdict("Source", &blk->src);
         _cfgraph_printdict("Dest", &blk->dest);
         _cfgraph_printdict("LoopSrc", &blk->loopsrc);
+        _cfgraph_printdict("LoopBlocks", &blk->loopblocks);
         _cfgraph_printdict("Uses", &blk->uses);
         _cfgraph_printdict("Writes", &blk->writes);
         printf("\n");

@@ -532,10 +532,7 @@ bool strategy_method_resolution(optimizer *opt) {
         
         value method;
         indx newkindx;
-        instructionindx srcindx;
         if (morpho_lookupmethod(type, label, &method) &&
-            optimize_source(opt, DECODE_A(instr), &srcindx) &&
-            block_contains(optimize_currentblock(opt), srcindx) &&
             optimize_addconstant(opt, method, &newkindx)) {
             
             // Replace invoke with an equivalent sequence of instructions

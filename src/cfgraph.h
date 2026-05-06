@@ -33,6 +33,7 @@ typedef struct sblock {
     dictionary uses; /** Registers that the block uses as input */
     dictionary writes; /** Registers that the block writes to */
     dictionary loopsrc; /** Structural back-edge predecessors for loop headers */
+    dictionary loopblocks; /** Blocks that participate in the loop headed here */
     
     objectfunction *func; /** Function that encapsulates the block */
     
@@ -70,7 +71,9 @@ void block_setsource(block *b, blockindx indx);
 void block_setdest(block *b, blockindx indx);
 void block_clearloopinfo(block *b);
 void block_setloopsource(block *b, blockindx indx);
+void block_setloopblock(block *b, blockindx indx);
 bool block_isloopheader(block *b);
+bool block_inloop(block *b, blockindx indx);
 bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph);
 bool cfgraph_disconnect(block *src, blockindx dst, cfgraph *graph);
 

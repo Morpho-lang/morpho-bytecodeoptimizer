@@ -861,13 +861,62 @@ void optimize_loopcandidates_visitblock(optimizer *opt, block *src) {
     }
 }
 
+/* Walk backward from a structural backedge until we reach the header, marking loop blocks. */
+static void _optimize_markloopblocks(optimizer *opt, block *header, blockindx curindx) {
+    block *cur;
+
+    if (block_inloop(header, curindx) ||
+        !cfgraph_indx(&opt->graph, curindx, &cur) ||
+        cur->func!=header->func) return;
+
+    block_setloopblock(header, curindx);
+    if (cur==header) return;
+
+    for (int i=0; i<cur->src.capacity; i++) {
+        value key = cur->src.contents[i].key;
+
+        if (MORPHO_ISINTEGER(key)) {
+            _optimize_markloopblocks(opt, header, (blockindx) MORPHO_GETINTEGERVALUE(key));
+        }
+    }
+}
+
+static bool _loopwrites(optimizer *opt, block *header, registerindx r) {
+    for (int i=0; i<header->loopblocks.capacity; i++) {
+        value key = header->loopblocks.contents[i].key;
+        block *blk;
+
+        if (!MORPHO_ISINTEGER(key)) continue;
+        if (!cfgraph_indx(&opt->graph, (blockindx) MORPHO_GETINTEGERVALUE(key), &blk)) continue;
+        if (block_writes(blk, r)) return true;
+    }
+
+    return false;
+}
+
+/** Builds loop-body metadata for each structural loop header. */
+void optimize_loopcandidates_finalize(optimizer *opt) {
+    for (int i=0; i<opt->graph.count; i++) {
+        block *header = &opt->graph.data[i];
+
+        if (!block_isloopheader(header)) continue;
+        /* Seed the backward walk from each structural backedge predecessor. */
+        for (int j=0; j<header->loopsrc.capacity; j++) {
+            value key = header->loopsrc.contents[j].key;
+
+            if (!MORPHO_ISINTEGER(key)) continue;
+            _optimize_markloopblocks(opt, header, (blockindx) MORPHO_GETINTEGERVALUE(key));
+        }
+    }
+}
+
 /* -------------------------------------
  * Pre-pass table
  * ------------------------------------- */
 
 prepass prepasses[] = {
     { optimize_globalusage_init, NULL, globalusagevisitors, NULL },
-    { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, NULL },
+    { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, optimize_loopcandidates_finalize },
     { NULL, NULL, NULL, NULL }
 };
 
@@ -913,28 +962,88 @@ static bool _isparam(int n, block **src, int i) {
     return false;
 }
 
+static void _prepareboundaryfact(reginfo *info) {
+    info->usage=REGUSE_NONE;
+    info->hasalias=false;
+    info->alias=0;
+
+    if (info->contents==REG_NOFACT || info->contents==REG_TYPEDVALUE || info->contents==REG_VALUE) {
+        info->indx=0;
+        info->iindx=INSTRUCTIONINDX_EMPTY;
+    }
+    if (MORPHO_ISNIL(info->type)) info->typeinfo=REGTYPE_UNKNOWN;
+}
+
+static reginfo _resolvejoinfact(int n, block **src, int rindx) {
+    reginfo joined = src[0]->rout.rinfo[rindx];
+
+    _prepareboundaryfact(&joined);
+    for (int k=1; k<n; k++) {
+        reginfo_join(&joined, &src[k]->rout.rinfo[rindx]);
+    }
+
+    // Register aliases are local facts; drop them conservatively at block boundaries.
+    joined.hasalias=false;
+    joined.alias=0;
+    return joined;
+}
+
 static void _resolve(int n, block **src, reginfolist *dest) {
     for (int i=0; i<dest->nreg; i++) {
         if (_isparam(n, src, i)) continue;
+        dest->rinfo[i]=_resolvejoinfact(n, src, i);
+    }
+}
 
-        reginfo joined = src[0]->rout.rinfo[i];
-        joined.usage=REGUSE_NONE;
+static bool _isloopbackedgepred(block *blk, blockindx srcindx) {
+    return dictionary_get(&blk->loopsrc, MORPHO_INTEGER((int) srcindx), NULL);
+}
+
+static void _resolveloopheader(optimizer *opt, block *blk, int nsrc, block **src, reginfolist *dest) {
+    block *entrypred[nsrc];
+    block *backpred[nsrc];
+    int nentry=0, nback=0;
+
+    for (int i=0; i<nsrc; i++) {
+        blockindx srcindx;
+
+        if (!cfgraph_findindx(&opt->graph, src[i], &srcindx)) continue;
+        if (_isloopbackedgepred(blk, srcindx)) {
+            backpred[nback++]=src[i];
+        } else {
+            entrypred[nentry++]=src[i];
+        }
+    }
+
+    if (nentry==0 || nback==0) {
+        _resolve(nsrc, src, dest);
+        return;
+    }
+
+    _resolve(nentry, entrypred, dest);
+
+    for (int i=0; i<dest->nreg; i++) {
+        reginfo baseline, joined;
+        bool preserve=true;
+
+        if (_isparam(nentry, entrypred, i) || _isparam(nback, backpred, i)) continue;
+
+        baseline=dest->rinfo[i];
+        _prepareboundaryfact(&baseline);
+
+        preserve = !_loopwrites(opt, blk, i);
+
+        if (preserve) {
+            dest->rinfo[i]=baseline;
+            continue;
+        }
+
+        joined=baseline;
+        for (int k=0; k<nback; k++) {
+            reginfo_join(&joined, &backpred[k]->rout.rinfo[i]);
+        }
         joined.hasalias=false;
         joined.alias=0;
-        if (joined.contents==REG_NOFACT || joined.contents==REG_TYPEDVALUE || joined.contents==REG_VALUE) {
-            joined.indx=0;
-            joined.iindx=INSTRUCTIONINDX_EMPTY;
-        }
-        if (MORPHO_ISNIL(joined.type)) joined.typeinfo=REGTYPE_UNKNOWN;
-
-        for (int k=1; k<n; k++) {
-            reginfo_join(&joined, &src[k]->rout.rinfo[i]);
-        }
-
-        // Register aliases are local facts; drop them conservatively at block boundaries.
-        joined.hasalias=false;
-        joined.alias=0;
-
         dest->rinfo[i]=joined;
     }
 }
@@ -963,7 +1072,11 @@ static void optimize_joinblockinput(optimizer *opt, block *blk) {
             k++;
         }
         
-        _resolve(blk->src.count, srcblk, &opt->rlist);
+        if (block_isloopheader(blk)) {
+            _resolveloopheader(opt, blk, blk->src.count, srcblk, &opt->rlist);
+        } else {
+            _resolve(blk->src.count, srcblk, &opt->rlist);
+        }
     }
     
     if (opt->verbose) {
