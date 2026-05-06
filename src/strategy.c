@@ -461,23 +461,18 @@ bool strategy_method_resolution(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     bool success=false;
     
-    value type = optimize_type(opt, DECODE_A(instr)+1);
+    registerindx receiver = DECODE_A(instr)+1;
+    value type = optimize_type(opt, receiver);
     indx kindx;
     
-    if (MORPHO_ISEQUAL(type, typeclass)) { // Handle calls on a class 
-        if (optimize_isconstant(opt, DECODE_A(instr)+1, &kindx)) {
-            type=optimize_getconstant(opt, kindx);
-        } else return false;
-    }
+    if (MORPHO_ISEQUAL(type, typeclass)) return false;
     
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
-        optimize_isconstant(opt, DECODE_A(instr), &kindx)) {
+        optimize_isconstant(opt, DECODE_A(instr), &kindx) &&
+        optimize_hasuniquetype(opt, receiver)) {
         
         objectclass *klass = MORPHO_GETCLASS(type);
         value label = optimize_getconstant(opt, kindx);
-        
-        // Todo: Should check to see if this method is replaced in any of the subclasses.
-        if (klass->children.count>0) return false;
         
         value method;
         indx newkindx;
@@ -548,7 +543,13 @@ bool strategy_metafunction_reduction(optimizer *opt) {
     if (_hasselfdispatch(opt, MORPHO_GETMETAFUNCTION(fn))) return false;
     
     value types[nargs];
-    for (registerindx i=0; i<nargs; i++) types[i]=optimize_type(opt, rA + i + (isMethod ? 2 : 1));
+    for (registerindx i=0; i<nargs; i++) {
+        registerindx r = rA + i + (isMethod ? 2 : 1);
+        value type = optimize_type(opt, r);
+        if (!optimize_hasuniquetype(opt, r)) type=MORPHO_NIL;
+
+        types[i]=type;
+    }
     
     error reduceerr = opt->err;
     if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &reduceerr, &newfn) &&

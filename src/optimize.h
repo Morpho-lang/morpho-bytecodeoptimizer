@@ -80,6 +80,7 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *indx);
 bool optimize_isglobal(optimizer *opt, registerindx i, indx *indx);
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *indx);
 bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, indx *indx);
+bool optimize_hasuniquetype(optimizer *opt, registerindx r);
 
 bool optimize_isoverwritten(optimizer *opt, registerindx i, instructionindx start);
 

@@ -239,6 +239,17 @@ bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, in
     return reginfolist_contents(&opt->rlist, i, contents, indx);
 }
 
+/** Checks if a register has an exact type or a subtype fact with no subclasses */
+bool optimize_hasuniquetype(optimizer *opt, registerindx r) {
+    value type = optimize_type(opt, r);
+    regtypeinfo info = optimize_typeinfo(opt, r);
+
+    if (info==REGTYPE_EXACT) return !MORPHO_ISNIL(type);
+    if (info!=REGTYPE_SUBTYPE || !MORPHO_ISCLASS(type)) return false;
+
+    return (MORPHO_GETCLASS(type)->children.count==0);
+}
+
 /** Checks if a register is overwritten between start and the current instruction */
 bool optimize_isoverwritten(optimizer *opt, registerindx rindx, instructionindx start) {
     for (instructionindx i=start; i<opt->pc; i++) {
