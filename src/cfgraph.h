@@ -37,6 +37,7 @@ typedef struct sblock {
     
     bool isentry; /** Is this the entry point for the function */
     
+    reginfolist rin; /** Contents of registers on entry */
     reginfolist rout; /** Contents of registers on exit */
 } block;
 

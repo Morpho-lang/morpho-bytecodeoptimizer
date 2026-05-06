@@ -823,6 +823,8 @@ void optimize_restorestate(optimizer *opt, block *blk) {
         _resolve(blk->src.count, srcblk, &opt->rlist);
     }
     
+    reginfolist_copy(&opt->rlist, &blk->rin);
+    
     if (opt->verbose) {
         printf("Restored registers\n");
         reginfolist_show(&opt->rlist);

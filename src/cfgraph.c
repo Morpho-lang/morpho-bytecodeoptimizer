@@ -26,6 +26,7 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
     b->branch=BLOCKINDX_EMPTY;
     b->fallthrough=BLOCKINDX_EMPTY;
     
+    reginfolist_init(&b->rin, func->nregs);
     reginfolist_init(&b->rout, func->nregs);
     
     dictionary_init(&b->src);
@@ -36,6 +37,7 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
 
 /** Clears a basic block structure */
 void block_clear(block *b) {
+    reginfolist_clear(&b->rin);
     reginfolist_clear(&b->rout);
     
     dictionary_clear(&b->src);
@@ -193,6 +195,10 @@ void cfgraph_show(cfgraph *graph) {
         _cfgraph_printdict("Uses", &blk->uses);
         _cfgraph_printdict("Writes", &blk->writes);
         printf("\n");
+        printf("  In:\n");
+        reginfolist_show(&blk->rin);
+        printf("  Out:\n");
+        reginfolist_show(&blk->rout);
     }
 }
 

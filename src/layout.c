@@ -199,6 +199,8 @@ static bool blockcomposer_blockhasrealinstructions(blockcomposer *comp, block *b
 void blockcomposer_processblock(blockcomposer *comp, block *blk) {
     block out;
     block_init(&out, blk->func, comp->out.count);
+    reginfolist_copy(&blk->rin, &out.rin);
+    reginfolist_copy(&blk->rout, &out.rout);
     
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction instr = blockcomposer_getinstruction(comp, i);
