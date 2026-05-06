@@ -153,7 +153,7 @@ bool block_isentry(block *b) {
 
 /** Get a constant from a block */
 value block_getconstant(block *b, indx i) {
-    if (i>b->func->konst.count) return MORPHO_NIL;
+    if (i>=b->func->konst.count) return MORPHO_NIL;
     return b->func->konst.data[i];
 }
 

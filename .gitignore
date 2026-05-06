@@ -6,5 +6,6 @@ lib/*
 test/testsuite/FailedTests.txt
 test/testsuite/tests
 test/examples
+test/disassembly_snapshots/*
 *.png
 *.pov
