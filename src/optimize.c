@@ -143,9 +143,19 @@ void optimize_settype(optimizer *opt, registerindx r, value type) {
     reginfolist_settype(&opt->rlist, r, type);
 }
 
+/** Callback function to set the type and precision of a register */
+void optimize_settypeinfo(optimizer *opt, registerindx r, value type, regtypeinfo info) {
+    reginfolist_settypeinfo(&opt->rlist, r, type, info);
+}
+
 /** Callback function to get the type of a register */
 value optimize_type(optimizer *opt, registerindx r) {
     return reginfolist_type(&opt->rlist, r);
+}
+
+/** Callback function to get type precision of a register */
+regtypeinfo optimize_typeinfo(optimizer *opt, registerindx r) {
+    return reginfolist_typeinfo(&opt->rlist, r);
 }
 
 /** Wrapper to get the type information from a value */
@@ -386,7 +396,7 @@ globalinfolist *optimize_globalinfolist(optimizer *opt) {
 void _optusagefn(registerindx r, void *ref) {
     reginfolist *rinfo = (reginfolist *) ref;
     
-    reginfolist_uses(rinfo, r);
+    reginfolist_incread(rinfo, r);
 }
 
 /** Updates reginfo usage information for an insertion */
@@ -688,14 +698,14 @@ void optimize_signature(optimizer *opt) {
     if (func->klass &&
         optimize_methodcountowners(opt, func)==1) {
         reginfolist_write(&opt->rlist, func->entry, 0, REG_PARAMETER, 0);
-        reginfolist_settype(&opt->rlist, 0, MORPHO_OBJECT(func->klass));
+        reginfolist_settypeinfo(&opt->rlist, 0, MORPHO_OBJECT(func->klass), REGTYPE_SUBTYPE);
     }
     
     value type;
     for (registerindx i=0; i<func->nargs; i++) {
         reginfolist_write(&opt->rlist, func->entry, i+1, REG_PARAMETER, 0);
         if (signature_getparamtype(&func->sig, i, &type)) {
-            reginfolist_settype(&opt->rlist, i+1, type);
+            reginfolist_settypeinfo(&opt->rlist, i+1, type, REGTYPE_SUBTYPE);
         }
     }
 }

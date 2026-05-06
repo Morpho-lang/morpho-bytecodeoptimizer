@@ -13,8 +13,10 @@ void reginfo_init(reginfo *info) {
     info->contents=REG_EMPTY;
     info->indx=0;
     info->iindx=INSTRUCTIONINDX_EMPTY;
-    info->nused=0;
+    info->nread=0;
+    info->nwrite=0;
     info->type=MORPHO_NIL;
+    info->typeinfo=REGTYPE_UNKNOWN;
     info->ndup=0; 
 }
 
@@ -43,6 +45,18 @@ bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
     return true;
 }
 
+/** Adds one to the read counter for register i */
+void reginfolist_incread(reginfolist *rlist, int rindx) {
+    if (rindx>=rlist->nreg) return;
+    rlist->rinfo[rindx].nread++;
+}
+
+/** Adds one to the write counter for register i */
+void reginfolist_incwrite(reginfolist *rlist, int rindx) {
+    if (rindx>=rlist->nreg) return;
+    rlist->rinfo[rindx].nwrite++;
+}
+
 /** Writes a value to a register */
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx) {
     if (rindx>=rlist->nreg) return;
@@ -54,16 +68,24 @@ void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, reg
     if (contents==REG_REGISTER) reginfolist_duplicate(rlist, (registerindx) indx); // Track duplication
     
     rlist->rinfo[rindx].indx=indx;
-    rlist->rinfo[rindx].nused=0;
+    rlist->rinfo[rindx].nread=0;
+    reginfolist_incwrite(rlist, rindx);
     rlist->rinfo[rindx].iindx=iindx;
     rlist->rinfo[rindx].type=MORPHO_NIL;
+    rlist->rinfo[rindx].typeinfo=REGTYPE_UNKNOWN;
     rlist->rinfo[rindx].ndup=0;
 }
 
 /** Sets the type associated with a register */
 void reginfolist_settype(reginfolist *rlist, int rindx, value type) {
+    reginfolist_settypeinfo(rlist, rindx, type, REGTYPE_EXACT);
+}
+
+/** Sets the type and precision associated with a register */
+void reginfolist_settypeinfo(reginfolist *rlist, int rindx, value type, regtypeinfo info) {
     if (rindx>=rlist->nreg) return;
     rlist->rinfo[rindx].type=type;
+    rlist->rinfo[rindx].typeinfo=(MORPHO_ISNIL(type) ? REGTYPE_UNKNOWN : info);
 }
 
 /** Gets the type associated with a register */
@@ -72,10 +94,10 @@ value reginfolist_type(reginfolist *rlist, int rindx) {
     return rlist->rinfo[rindx].type;
 }
 
-/** Adds one to the usage counter for register i */
-void reginfolist_uses(reginfolist *rlist, int rindx) {
-    if (rindx>=rlist->nreg) return;
-    rlist->rinfo[rindx].nused++;
+/** Gets the type precision associated with a register */
+regtypeinfo reginfolist_typeinfo(reginfolist *rlist, int rindx) {
+    if (rindx>=rlist->nreg) return REGTYPE_UNKNOWN;
+    return rlist->rinfo[rindx].typeinfo;
 }
 
 /** Gets the content type and indx associated with a register */
@@ -102,7 +124,13 @@ bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx) {
 /** Count the number of times a register is used */
 int reginfolist_countuses(reginfolist *rlist, int rindx) {
     if (rindx>=rlist->nreg) return 0;
-    return rlist->rinfo[rindx].nused;
+    return rlist->rinfo[rindx].nread;
+}
+
+/** Count the number of times a register is written */
+int reginfolist_countwrites(reginfolist *rlist, int rindx) {
+    if (rindx>=rlist->nreg) return 0;
+    return rlist->rinfo[rindx].nwrite;
 }
 
 /** Indicate a register is duplicated */
@@ -118,6 +146,7 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
     
     reginfolist_contents(rlist, rindx, &srccontents, &srcindx);
     value srctype = reginfolist_type(rlist, rindx);
+    regtypeinfo srctypeinfo = reginfolist_typeinfo(rlist, rindx);
     
     for (registerindx i=0; i<rlist->nreg; i++) { // Look for registers
         if (i==rindx) continue; // Skip over the tautological case
@@ -129,15 +158,15 @@ void reginfolist_unduplicate(reginfolist *rlist, int rindx) {
         if (icontents==REG_REGISTER &&
             iindx==rindx) {
             // Move the contents from the source register into the duplicate reg i
+            int nread = rlist->rinfo[i].nread, nwrite = rlist->rinfo[i].nwrite;
             instructionindx src;
             reginfolist_source(rlist, i, &src); // The write instruction should remain the duplicating instruction
             
             reginfolist_write(rlist, src, i, srccontents, srcindx);
-            if (!MORPHO_ISNIL(srctype)) reginfolist_settype(rlist, i, srctype);
+            if (!MORPHO_ISNIL(srctype)) reginfolist_settypeinfo(rlist, i, srctype, srctypeinfo);
             
-            // Preserve usage count
-            int nused = reginfolist_countuses(rlist, rindx);
-            rlist->rinfo[i].nused=nused;
+            rlist->rinfo[i].nread=nread;
+            rlist->rinfo[i].nwrite=nwrite;
         }
         
     }
@@ -175,15 +204,19 @@ void reginfolist_show(reginfolist *rlist) {
         
         if (!MORPHO_ISNIL(rlist->rinfo[i].type)) { // Type
             printf(" ");
+            if (rlist->rinfo[i].typeinfo==REGTYPE_EXACT) printf("=:");
+            if (rlist->rinfo[i].typeinfo==REGTYPE_SUBTYPE) printf("<:");
+            if (rlist->rinfo[i].typeinfo==REGTYPE_AMBIGUOUS) printf("?:");
             morpho_printvalue(NULL, rlist->rinfo[i].type);
         }
         
-        printf(" u:%i", rlist->rinfo[i].nused); // Usage
+        printf(" r:%i", rlist->rinfo[i].nread); // Reads
+        printf(" w:%i", rlist->rinfo[i].nwrite); // Writes
         
         if (rlist->rinfo[i].ndup) printf(" d:%i", rlist->rinfo[i].ndup); // Duplication
         
         if (rlist->rinfo[i].contents!=REG_EMPTY) { // Who wrote it?
-            printf(" w:%i", (int) rlist->rinfo[i].iindx);
+            printf(" i:%i", (int) rlist->rinfo[i].iindx);
         }
         
         printf("\n");

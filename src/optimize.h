@@ -67,7 +67,9 @@ bool optimize_checkerror(optimizer *opt);
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
 void optimize_writevalue(optimizer *opt, registerindx i);
 void optimize_settype(optimizer *opt, registerindx i, value type);
+void optimize_settypeinfo(optimizer *opt, registerindx i, value type, regtypeinfo info);
 value optimize_type(optimizer *opt, registerindx r);
+regtypeinfo optimize_typeinfo(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);
 
 value optimize_getconstant(optimizer *opt, indx i);
