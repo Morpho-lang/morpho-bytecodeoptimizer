@@ -1,0 +1,22 @@
+import bytecodeoptimizer
+
+// Minimal repro for stale global-load reuse across a call.
+// If LGL facts survive the call, the second load of g can be
+// incorrectly rewritten into a move from the first one.
+
+var g = 1
+
+fn mutate() {
+    g = 2
+}
+
+fn demo() {
+    var before = g
+    mutate()
+    var after = g
+
+    print before // expect: 1
+    print after  // expect: 2
+}
+
+demo()

@@ -307,6 +307,17 @@ void reginfolist_invalidate(reginfolist *rlist, regcontents contents, indx ix) {
     }
 }
 
+/** Converts all facts of a given content type into generic values while preserving type info. */
+void reginfolist_generalizecontent(reginfolist *rlist, regcontents contents) {
+    for (registerindx i=0; i<rlist->nreg; i++) {
+        if (rlist->rinfo[i].contents==contents) {
+            rlist->rinfo[i].contents = (MORPHO_ISNIL(rlist->rinfo[i].type) ? REG_VALUE : REG_TYPEDVALUE);
+            reginfo_clearsource(&rlist->rinfo[i]);
+            reginfo_clearalias(&rlist->rinfo[i]);
+        }
+    }
+}
+
 /** Display the register info list */
 void reginfolist_show(reginfolist *rlist) {
     for (int i=0; i<rlist->nreg; i++) {

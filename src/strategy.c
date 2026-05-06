@@ -220,6 +220,51 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
  * Register replacement
  * ------------------------------------- */
 
+typedef struct {
+    registerindx target;
+    bool used;
+} _strategyusedregister;
+
+static void _strategy_findusedregister(registerindx r, void *ref) {
+    _strategyusedregister *used = (_strategyusedregister *) ref;
+    if (r==used->target) used->used=true;
+}
+
+static bool _strategy_registerusedsince(optimizer *opt, instructionindx start, registerindx r) {
+    _strategyusedregister used = { .target = r, .used = false };
+
+    for (instructionindx i=start; i<=optimize_getinstructionindx(opt); i++) {
+        instruction instr = optimize_getinstructionat(opt, i);
+        opcode_usageforinstruction(optimize_currentblock(opt), instr, _strategy_findusedregister, &used);
+        if (used.used) return true;
+    }
+
+    return false;
+}
+
+static bool _strategy_cleanupaliassource(optimizer *opt, registerindx oldreg, registerindx newreg) {
+    instructionindx src;
+    instruction source;
+
+    if (oldreg==newreg ||
+        !optimize_source(opt, oldreg, &src) ||
+        !block_contains(optimize_currentblock(opt), src)) return false;
+
+    source = optimize_getinstructionat(opt, src);
+    if (DECODE_OP(source)!=OP_MOV || DECODE_A(source)!=oldreg) return false;
+
+    if (_strategy_registerusedsince(opt, src+1, oldreg) ||
+        optimize_isused(opt, oldreg)) return false;
+
+    if (!optimize_deleteinstruction(opt, src)) return false;
+
+    /* The deleted instruction may still be reflected in the current register facts.
+       Clear the alias register now so later rewrites in this pass don't reuse stale data. */
+    optimize_write(opt, oldreg, REG_NOFACT, 0);
+
+    return true;
+}
+
 bool strategy_register_replacement(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     instruction op = DECODE_OP(instr);
@@ -242,6 +287,13 @@ bool strategy_register_replacement(optimizer *opt) {
     
     if (na==a && nb==b && nc==c) return false;
     optimize_replaceinstruction(opt, ENCODE(op, na, nb, nc));
+
+    if ((flags & OPCODE_USES_A) &&
+        !(flags & OPCODE_OVERWRITES_A) &&
+        !(flags & OPCODE_OVERWRITES_AP1)) _strategy_cleanupaliassource(opt, a, na);
+    if (flags & OPCODE_USES_B) _strategy_cleanupaliassource(opt, b, nb);
+    if (flags & OPCODE_USES_C) _strategy_cleanupaliassource(opt, c, nc);
+
     return true;
 }
 

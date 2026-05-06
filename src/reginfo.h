@@ -87,6 +87,7 @@ int reginfolist_countwrites(reginfolist *rlist, int rindx);
 bool reginfolist_alias(reginfolist *rlist, int rindx, registerindx *alias);
 
 void reginfolist_invalidate(reginfolist *rlist, regcontents contents, indx indx);
+void reginfolist_generalizecontent(reginfolist *rlist, regcontents contents);
 
 void reginfolist_show(reginfolist *rlist);
 

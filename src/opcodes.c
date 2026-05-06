@@ -139,6 +139,11 @@ void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    /* Calls can mutate globals or captured state. Drop cached nonlocal load facts
+       so later LGL/LUP instructions are not rewritten to stale register copies. */
+    reginfolist_generalizecontent(&opt->rlist, REG_GLOBAL);
+    reginfolist_generalizecontent(&opt->rlist, REG_UPVALUE);
     
     value type=MORPHO_NIL;
     value content=MORPHO_NIL;
@@ -171,6 +176,10 @@ void invoke_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    /* Method dispatch has the same nonlocal side-effect risk as a direct call. */
+    reginfolist_generalizecontent(&opt->rlist, REG_GLOBAL);
+    reginfolist_generalizecontent(&opt->rlist, REG_UPVALUE);
     
     for (registerindx i=2; i<=nargs+2*nopt+1; i++) {
         optimize_writevalue(opt, a+i);

@@ -1,0 +1,26 @@
+import bytecodeoptimizer
+
+// Minimal repro for stale upvalue-load reuse across a call.
+// If LUP facts survive the call, the second load of x can be
+// incorrectly rewritten into a move from the first one.
+
+fn outer() {
+    var x = 1
+
+    fn mutate() {
+        x = 2
+    }
+
+    fn demo() {
+        var before = x
+        mutate()
+        var after = x
+
+        print before // expect: 1
+        print after  // expect: 2
+    }
+
+    demo()
+}
+
+outer()
