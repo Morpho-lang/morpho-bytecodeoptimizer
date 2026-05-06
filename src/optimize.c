@@ -780,24 +780,28 @@ bool optimize_block(optimizer *opt, block *blk) {
  * ********************************************************************** */
 
 /** Function type to initialize an optimizer prepass. */
-typedef void (*optimizationprepassinitfn) (optimizer *opt);
+typedef void (*prepassinitfn) (optimizer *opt);
 
 /** Function type to visit an instruction during an optimizer prepass. */
-typedef void (*optimizationprepassvisitfn) (optimizer *opt, block *blk, instruction instr);
+typedef void (*prepassinstructionvisitfn) (optimizer *opt, block *blk, instruction instr);
+
+/** Function type to visit a block during an optimizer prepass. */
+typedef void (*prepassblockvisitfn) (optimizer *opt, block *blk);
 
 /** Function type to finalize an optimizer prepass. */
-typedef void (*optimizationprepassfinalizefn) (optimizer *opt);
+typedef void (*prepassfinalizefn) (optimizer *opt);
 
 typedef struct {
     instruction match;
-    optimizationprepassvisitfn visit;
-} optimizationprepassvisitor;
+    prepassinstructionvisitfn visit;
+} prepassinstructionvisittable;
 
 typedef struct {
-    optimizationprepassinitfn init;
-    optimizationprepassfinalizefn finalize;
-    optimizationprepassvisitor *visitors;
-} optimizationprepass;
+    prepassinitfn init;
+    prepassblockvisitfn visitblock;
+    prepassinstructionvisittable *visitinstructiontable;
+    prepassfinalizefn finalize;
+} prepass;
 
 /* -------------------------------------
  * Global usage
@@ -818,19 +822,53 @@ void optimize_globalstore_visit(optimizer *opt, block *blk, instruction instr) {
     globalinfolist_store(&opt->glist, DECODE_Bx(instr));
 }
 
-optimizationprepassvisitor globalusagevisitors[] = {
+prepassinstructionvisittable globalusagevisitors[] = {
     { OP_LGL, optimize_globalread_visit },
     { OP_SGL, optimize_globalstore_visit },
     { OP_END, NULL }
 };
 
 /* -------------------------------------
+ * Loop candidate marking
+ * ------------------------------------- */
+
+/** Initializes loop metadata before structural scanning. */
+void optimize_loopcandidates_init(optimizer *opt) {
+    for (int i=0; i<opt->graph.count; i++) {
+        block_clearloopinfo(&opt->graph.data[i]);
+    }
+}
+
+/** Marks structural back-edges from a block after the CFG has been built and sorted. */
+void optimize_loopcandidates_visitblock(optimizer *opt, block *src) {
+    blockindx i;
+
+    if (!cfgraph_findindx(&opt->graph, src, &i)) return;
+
+    for (int j=0; j<src->dest.capacity; j++) {
+        value key = src->dest.contents[j].key;
+        block *dest;
+        blockindx dst;
+
+        if (!MORPHO_ISINTEGER(key)) continue;
+        dst = MORPHO_GETINTEGERVALUE(key);
+        if (!cfgraph_indx(&opt->graph, dst, &dest)) continue;
+
+        /* A backward edge is a cheap loop candidate that later passes can refine. */
+        if (dest->func==src->func && dest->start<=src->start) {
+            block_setloopsource(dest, i);
+        }
+    }
+}
+
+/* -------------------------------------
  * Pre-pass table
  * ------------------------------------- */
 
-optimizationprepass prepasses[] = {
-    { optimize_globalusage_init, NULL, globalusagevisitors },
-    { NULL, NULL, NULL }
+prepass prepasses[] = {
+    { optimize_globalusage_init, NULL, globalusagevisitors, NULL },
+    { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, NULL },
+    { NULL, NULL, NULL, NULL }
 };
 
 /** Run all optimizer prepasses for the current pass. */
@@ -844,15 +882,20 @@ void optimize_runprepasses(optimizer *opt) {
         block *blk = &opt->graph.data[i];
         if (!optimize_blockisreachable(opt, blk)) continue;
 
+        for (int k=0; k<nprepasses && !optimize_checkerror(opt); k++) {
+            if (prepasses[k].visitblock) prepasses[k].visitblock(opt, blk);
+        }
+
         for (instructionindx j=blk->start; j<=blk->end && !optimize_checkerror(opt); j++) {
             instruction instr = optimize_getinstructionat(opt, j);
             instruction op = DECODE_OP(instr);
 
             for (int k=0; k<nprepasses && !optimize_checkerror(opt); k++) {
-                optimizationprepassvisitor *visitors = prepasses[k].visitors;
+                prepassinstructionvisittable *visitinstructiontable = prepasses[k].visitinstructiontable;
 
-                for (int l=0; visitors[l].visit; l++) {
-                    if (visitors[l].match==op || visitors[l].match==OP_ANY) visitors[l].visit(opt, blk, instr);
+                if (!visitinstructiontable) continue;
+                for (int l=0; visitinstructiontable[l].visit; l++) {
+                    if (visitinstructiontable[l].match==op || visitinstructiontable[l].match==OP_ANY) visitinstructiontable[l].visit(opt, blk, instr);
                 }
             }
         }

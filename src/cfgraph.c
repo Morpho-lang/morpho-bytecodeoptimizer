@@ -23,6 +23,7 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
     b->end=INSTRUCTIONINDX_EMPTY;
     b->func=func;
     b->isentry=false;
+    b->isloopheader=false;
     b->branch=BLOCKINDX_EMPTY;
     b->fallthrough=BLOCKINDX_EMPTY;
     
@@ -33,6 +34,7 @@ void block_init(block *b, objectfunction *func, instructionindx start) {
     dictionary_init(&b->dest);
     dictionary_init(&b->uses);
     dictionary_init(&b->writes);
+    dictionary_init(&b->loopsrc);
 }
 
 /** Clears a basic block structure */
@@ -44,6 +46,7 @@ void block_clear(block *b) {
     dictionary_clear(&b->uses);
     dictionary_clear(&b->dest);
     dictionary_clear(&b->writes);
+    dictionary_clear(&b->loopsrc);
 }
 
 /* --------------
@@ -119,6 +122,23 @@ void block_setdest(block *b, blockindx indx) {
     dictionary_insert(&b->dest, MORPHO_INTEGER((int) indx), MORPHO_NIL);
 }
 
+/** Clears loop candidate metadata on a block. */
+void block_clearloopinfo(block *b) {
+    _wipe(&b->loopsrc);
+    b->isloopheader=false;
+}
+
+/** Records a structural back-edge predecessor for a loop header. */
+void block_setloopsource(block *b, blockindx indx) {
+    b->isloopheader=true;
+    dictionary_insert(&b->loopsrc, MORPHO_INTEGER((int) indx), MORPHO_NIL);
+}
+
+/** Determines if a block is a structural loop header candidate. */
+bool block_isloopheader(block *b) {
+    return b->isloopheader;
+}
+
 bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph) {
     block *dest;
 
@@ -190,8 +210,10 @@ void cfgraph_show(cfgraph *graph) {
         block *blk = graph->data+i;
         printf("Block %u [%td, %td] ", i, blk->start, blk->end);
         
+        if (blk->isloopheader) printf("( LoopHeader ) ");
         _cfgraph_printdict("Source", &blk->src);
         _cfgraph_printdict("Dest", &blk->dest);
+        _cfgraph_printdict("LoopSrc", &blk->loopsrc);
         _cfgraph_printdict("Uses", &blk->uses);
         _cfgraph_printdict("Writes", &blk->writes);
         printf("\n");

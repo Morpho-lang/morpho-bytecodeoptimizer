@@ -32,10 +32,12 @@ typedef struct sblock {
     
     dictionary uses; /** Registers that the block uses as input */
     dictionary writes; /** Registers that the block writes to */
+    dictionary loopsrc; /** Structural back-edge predecessors for loop headers */
     
     objectfunction *func; /** Function that encapsulates the block */
     
     bool isentry; /** Is this the entry point for the function */
+    bool isloopheader; /** Is this block a structural loop header candidate */
     
     reginfolist rin; /** Contents of registers on entry */
     reginfolist rout; /** Contents of registers on exit */
@@ -66,6 +68,9 @@ void block_computeusage(block *blk, instruction *ilist);
 
 void block_setsource(block *b, blockindx indx);
 void block_setdest(block *b, blockindx indx);
+void block_clearloopinfo(block *b);
+void block_setloopsource(block *b, blockindx indx);
+bool block_isloopheader(block *b);
 bool cfgraph_connect(block *src, blockindx dst, instructionindx dststart, cfgraph *graph);
 bool cfgraph_disconnect(block *src, blockindx dst, cfgraph *graph);
 
