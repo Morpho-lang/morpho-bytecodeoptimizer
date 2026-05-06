@@ -612,6 +612,7 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
         if (!optimize_isempty(opt, i) &&                // Does the register contain something?
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
             reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
+            reginfolist_regcontents(&blk->rout, i)==REG_EMPTY && // Is it dead at block exit?
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
@@ -721,79 +722,8 @@ void optimize_signature(optimizer *opt) {
     }
 }
 
-static bool _isparam(int n, block **src, int i) {
-    for (int k=0; k<n; k++) if (src[k]->rout.rinfo[i].contents==REG_PARAMETER) return true;
-    return false;
-}
-
-static void _resolve(int n, block **src, reginfolist *dest) {
-    for (int i=0; i<dest->nreg; i++) {
-        if (_isparam(n, src, i)) continue;
-
-        reginfo joined = src[0]->rout.rinfo[i];
-        joined.nread=0;
-        joined.nwrite=0;
-        joined.ndup=0;
-        if (joined.contents==REG_EMPTY || joined.contents==REG_VALUE) {
-            joined.indx=0;
-            joined.iindx=INSTRUCTIONINDX_EMPTY;
-        }
-        if (MORPHO_ISNIL(joined.type)) joined.typeinfo=REGTYPE_UNKNOWN;
-
-        for (int k=1; k<n; k++) {
-            reginfo_join(&joined, &src[k]->rout.rinfo[i]);
-        }
-
-        // Register aliases are not stable across block boundaries because restore/join
-        // does not preserve the duplication bookkeeping needed to repair them.
-        if (joined.contents==REG_REGISTER) {
-            joined.contents=REG_VALUE;
-            joined.indx=0;
-            joined.iindx=INSTRUCTIONINDX_EMPTY;
-        }
-
-        dest->rinfo[i]=joined;
-    }
-}
-
-void optimize_restorestate(optimizer *opt, block *blk) {
-    reginfolist_wipe(&opt->rlist, blk->func->nregs);
-    
-    optimize_signature(opt); // Restore function parameters
-    
-    int nentry = blk->src.count;
-    if (!block_isentry(blk) &&
-        nentry>0) {
-        block *srcblk[nentry]; // Unpack and find source blocks from the dictionary
-        
-        for (int i=0, k=0; i<blk->src.capacity; i++) {
-            value key = blk->src.contents[i].key;
-            if (MORPHO_ISNIL(key)) continue;
-            
-            if (!cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k])) return;
-            
-            if (opt->verbose) {
-                printf("Restoring from block %ti\n", srcblk[k]->start);
-                reginfolist_show(&srcblk[k]->rout);
-            }
-            
-            k++;
-        }
-        
-        if (blk->src.count>1) {
-            
-        }
-        
-        _resolve(blk->src.count, srcblk, &opt->rlist);
-    }
-    
-    reginfolist_copy(&opt->rlist, &blk->rin);
-    
-    if (opt->verbose) {
-        printf("Restored registers\n");
-        reginfolist_show(&opt->rlist);
-    }
-}
+static void optimize_joinblockinput(optimizer *opt, block *blk);
+static void optimize_loadblockinput(optimizer *opt, block *blk);
 
 /** Optimize a given block */
 bool optimize_block(optimizer *opt, block *blk) {
@@ -804,7 +734,7 @@ bool optimize_block(optimizer *opt, block *blk) {
         
         if (opt->verbose) printf("Optimizing block [%ti - %ti]:\n", blk->start, blk->end);
         
-        optimize_restorestate(opt, blk);
+        optimize_loadblockinput(opt, blk);
         
         for (instructionindx i=blk->start; i<=blk->end; i++) {
             instruction instr = optimize_fetch(opt, i);
@@ -837,13 +767,12 @@ bool optimize_block(optimizer *opt, block *blk) {
     
     // Finalize block information
     block_computeusage(blk, opt->prog->code.data); // Recompute usage
-    reginfolist_copy(&opt->rlist, &blk->rout); // Store register contents on output
     
     return true;
 }
 
 /* **********************************************************************
- * Optimization passes
+ * Prepasses
  * ********************************************************************** */
 
 /** Function type to initialize an optimizer prepass. */
@@ -928,9 +857,159 @@ void optimize_runprepasses(optimizer *opt) {
     for (int i=0; i<nprepasses; i++) if (prepasses[i].finalize) prepasses[i].finalize(opt);
 }
 
+/* **********************************************************************
+ * Dataflow analysis
+ * ********************************************************************** */
+
+static bool _isparam(int n, block **src, int i) {
+    for (int k=0; k<n; k++) if (src[k]->rout.rinfo[i].contents==REG_PARAMETER) return true;
+    return false;
+}
+
+static void _resolve(int n, block **src, reginfolist *dest) {
+    for (int i=0; i<dest->nreg; i++) {
+        if (_isparam(n, src, i)) continue;
+
+        reginfo joined = src[0]->rout.rinfo[i];
+        joined.nread=0;
+        joined.nwrite=0;
+        joined.ndup=0;
+        if (joined.contents==REG_EMPTY || joined.contents==REG_VALUE) {
+            joined.indx=0;
+            joined.iindx=INSTRUCTIONINDX_EMPTY;
+        }
+        if (MORPHO_ISNIL(joined.type)) joined.typeinfo=REGTYPE_UNKNOWN;
+
+        for (int k=1; k<n; k++) {
+            reginfo_join(&joined, &src[k]->rout.rinfo[i]);
+        }
+
+        // Register aliases are not stable across block boundaries because restore/join
+        // does not preserve the duplication bookkeeping needed to repair them.
+        if (joined.contents==REG_REGISTER) {
+            joined.contents=REG_VALUE;
+            joined.indx=0;
+            joined.iindx=INSTRUCTIONINDX_EMPTY;
+        }
+
+        dest->rinfo[i]=joined;
+    }
+}
+
+static void optimize_joinblockinput(optimizer *opt, block *blk) {
+    reginfolist_wipe(&opt->rlist, blk->func->nregs);
+    
+    optimize_signature(opt); // Restore function parameters
+    
+    int nentry = blk->src.count;
+    if (!block_isentry(blk) &&
+        nentry>0) {
+        block *srcblk[nentry]; // Unpack and find source blocks from the dictionary
+        
+        for (int i=0, k=0; i<blk->src.capacity; i++) {
+            value key = blk->src.contents[i].key;
+            if (MORPHO_ISNIL(key)) continue;
+            
+            if (!cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k])) return;
+            
+            if (opt->verbose) {
+                printf("Restoring from block %ti\n", srcblk[k]->start);
+                reginfolist_show(&srcblk[k]->rout);
+            }
+            
+            k++;
+        }
+        
+        _resolve(blk->src.count, srcblk, &opt->rlist);
+    }
+    
+    if (opt->verbose) {
+        printf("Restored registers\n");
+        reginfolist_show(&opt->rlist);
+    }
+}
+
+static void optimize_loadblockinput(optimizer *opt, block *blk) {
+    reginfolist_wipe(&opt->rlist, blk->func->nregs);
+    reginfolist_copy(&blk->rin, &opt->rlist);
+
+    if (opt->verbose) {
+        printf("Loaded block input\n");
+        reginfolist_show(&opt->rlist);
+    }
+}
+
+/** Simulates a block without applying rewrites to compute output facts from input facts. */
+static void optimize_transferblock(optimizer *opt, block *blk) {
+    opt->currentblk=blk;
+    optimize_joinblockinput(opt, blk);
+    reginfolist_copy(&opt->rlist, &blk->rin);
+
+    for (instructionindx i=blk->start; i<=blk->end && !optimize_checkerror(opt); i++) {
+        optimize_fetch(opt, i);
+        optimize_usage(opt);
+        optimize_track(opt);
+    }
+
+    reginfolist_copy(&opt->rlist, &blk->rout);
+}
+
+/** Enqueues reachable successor blocks when a block's output facts change. */
+static void optimize_queuesuccessors(optimizer *opt, block *blk, varray_instructionindx *worklist) {
+    for (int i=0; i<blk->dest.capacity; i++) {
+        value key = blk->dest.contents[i].key;
+        block *dest;
+        blockindx bindx;
+
+        if (!MORPHO_ISINTEGER(key)) continue;
+        bindx = MORPHO_GETINTEGERVALUE(key);
+        if (cfgraph_indx(&opt->graph, bindx, &dest) && optimize_blockisreachable(opt, dest)) {
+            varray_instructionindxwrite(worklist, bindx);
+        }
+    }
+}
+
+/** Runs inter-block dataflow until block input and output facts converge. */
+static void optimize_dataflow(optimizer *opt) {
+    varray_instructionindx worklist;
+    varray_instructionindxinit(&worklist);
+
+    for (blockindx i=0; i<opt->graph.count; i++) { // Add entry points
+        if (block_isentry(&opt->graph.data[i])) varray_instructionindxwrite(&worklist, i);
+    }
+
+    while (worklist.count>0 && !optimize_checkerror(opt)) {
+        instructionindx indx;
+        varray_instructionindxpop(&worklist, &indx);
+        block *blk;
+        reginfolist oldrout;
+        bool changed;
+
+        if (!cfgraph_indx(&opt->graph, indx, &blk)) continue;
+        if (!optimize_blockisreachable(opt, blk)) continue;
+
+        reginfolist_init(&oldrout, blk->func->nregs);
+        reginfolist_copy(&blk->rout, &oldrout);
+
+        optimize_transferblock(opt, blk);
+        changed = !reginfolist_equal(&oldrout, &blk->rout);
+
+        reginfolist_clear(&oldrout);
+
+        if (changed) optimize_queuesuccessors(opt, blk, &worklist);
+    }
+
+    varray_instructionindxclear(&worklist);
+}
+
+/* **********************************************************************
+ * Optimization pass
+ * ********************************************************************** */
+
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
     optimize_runprepasses(opt);
+    optimize_dataflow(opt);
     
     opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);

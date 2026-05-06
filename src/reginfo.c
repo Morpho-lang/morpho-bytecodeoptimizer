@@ -45,6 +45,29 @@ bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
     return true;
 }
 
+static bool reginfo_hasindexedcontents(regcontents contents);
+
+/** Checks if two reginfo records represent the same dataflow fact. */
+bool reginfo_equal(reginfo *a, reginfo *b) {
+    return (a->contents==b->contents &&
+            a->typeinfo==b->typeinfo &&
+            a->nread==b->nread &&
+            a->nwrite==b->nwrite &&
+            a->iindx==b->iindx &&
+            a->ndup==b->ndup &&
+            MORPHO_ISEQUAL(a->type, b->type) &&
+            (!reginfo_hasindexedcontents(a->contents) || a->indx==b->indx));
+}
+
+/** Checks if two reginfo lists represent the same dataflow fact. */
+bool reginfolist_equal(reginfolist *a, reginfolist *b) {
+    if (a->nreg!=b->nreg) return false;
+    for (int i=0; i<a->nreg; i++) {
+        if (!reginfo_equal(&a->rinfo[i], &b->rinfo[i])) return false;
+    }
+    return true;
+}
+
 static bool reginfo_hasindexedcontents(regcontents contents) {
     return (contents==REG_GLOBAL ||
             contents==REG_UPVALUE ||
