@@ -1,0 +1,7 @@
+import bytecodeoptimizer
+import constants
+
+var A = Complex(1,2)
+
+print abs(log(abs(A))+angle(A)*im - log(A))<1e-15
+// expect: true

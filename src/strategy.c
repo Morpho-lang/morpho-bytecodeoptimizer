@@ -196,7 +196,8 @@ bool strategy_common_subexpression_elimination(optimizer *opt) {
     for (registerindx i=0; i<opt->rlist.nreg; i++) {
         instructionindx src;
         
-        if (reginfolist_regcontents(&opt->rlist, i)==REG_VALUE && // Must contain a value
+        if ((reginfolist_regcontents(&opt->rlist, i)==REG_TYPEDVALUE ||
+             reginfolist_regcontents(&opt->rlist, i)==REG_VALUE) && // Must contain a value
             reginfolist_source(&opt->rlist, i, &src) && // Obtain the source
             src>=blk->start && // Check source is in this block
             src<=blk->end) {
@@ -527,6 +528,17 @@ static bool _hasselfdispatch(optimizer *opt, objectmetafunction *mfn) {
     return false;
 }
 
+static void _printreducedsignature(value fn) {
+    signature *sig = metafunction_getsignature(fn);
+
+    printf("Metafunction reduced to: ");
+    morpho_printvalue(NULL, fn);
+    printf(" signature=");
+    if (sig) signature_print(sig);
+    else printf("<none>");
+    printf("\n");
+}
+
 bool strategy_metafunction_reduction(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     bool isMethod = (DECODE_OP(instr) == OP_METHOD);
@@ -550,11 +562,12 @@ bool strategy_metafunction_reduction(optimizer *opt) {
 
         types[i]=type;
     }
-    
+
     error reduceerr = opt->err;
     if (metafunction_reduce(MORPHO_GETMETAFUNCTION(fn), nargs, types, &reduceerr, &newfn) &&
         !MORPHO_ISEQUAL(fn, newfn) &&
         optimize_addconstant(opt, newfn, &newkindx)) {
+        if (opt->verbose) _printreducedsignature(newfn);
         instruction insert[] = { // Insert replacement load constant
             ENCODE_LONG(OP_LCT, rA, (instruction) newkindx),
             instr

@@ -1,0 +1,21 @@
+import bytecodeoptimizer
+import constants
+
+/*
+var A = Complex(1,2)
+print abs(A)
+print log(abs(A))
+
+print (imag(exp(Complex(2,Pi/2)))==exp(2))
+
+print imag(exp(Complex(2,Pi/2)))
+
+print exp(Complex(2,Pi/2))
+
+
+print exp(2)
+*/
+
+var z = exp(Complex(2,Pi/2))
+print z
+print imag(z)

@@ -13,16 +13,24 @@
  * Reginfo
  * ********************************************************************** */
 
-/** Enumerated type recording where the contents of a register came from */
+/** Enumerated type recording what is known about the contents of a register. */
 typedef enum {
-    REG_EMPTY,    /** Empty register */
-    REG_PARAMETER,/** Contents are a function parameter */
-    REG_REGISTER, /** Contents moved from another register */
-    REG_CONSTANT, /** Contents came from the constant table */
-    REG_GLOBAL,   /** Contents came from a global */
-    REG_UPVALUE,  /** Contents came from an upvalue */
-    REG_VALUE,    /** A value */
+    REG_NOFACT,     /** No semantic fact is currently known for this register */
+    REG_VALUE,      /** Unknown value */
+    REG_TYPEDVALUE, /** Unknown value with known type information */
+    REG_PARAMETER,  /** Contents are a function parameter */
+    REG_CONSTANT,   /** Contents came from the constant table */
+    REG_GLOBAL,     /** Contents came from a global */
+    REG_UPVALUE,    /** Contents came from an upvalue */
 } regcontents;
+
+/** Enumerated type recording local usage of the current register fact. */
+typedef enum {
+    REGUSE_NONE,
+    REGUSE_READ,
+    REGUSE_WRITTEN,
+    REGUSE_READWRITTEN,
+} regusage;
 
 /** Enumerated type recording the precision of type information */
 typedef enum {
@@ -33,16 +41,17 @@ typedef enum {
 
 /** Record information about each register */
 typedef struct {
-    regcontents contents; /** Source of contents */
-    indx indx; /** Index of contents */
-    int nread; /** Number of times the value has been read within the block */
-    int nwrite; /** Number of times the register has been written within the block */
-    
-    instructionindx iindx; /** Instruction that last wrote to this register */
-    
+    regcontents contents; /** Semantic knowledge about the value */
+    indx indx; /** Index associated with the contents, if any */
+
+    regusage usage; /** Local usage summary for the current fact */
+    instructionindx iindx; /** Instruction that last wrote this fact */
+
     value type; /** Type information if known */
     regtypeinfo typeinfo; /** Precision of type information */
-    int ndup; /** Number of times the register has been duplicated */
+
+    bool hasalias; /** True if this fact is currently known to alias another register */
+    registerindx alias; /** Register that this fact currently aliases */
 } reginfo;
 
 typedef struct {
@@ -62,6 +71,7 @@ bool reginfo_equal(reginfo *a, reginfo *b);
 bool reginfolist_equal(reginfolist *a, reginfolist *b);
 void reginfo_join(reginfo *dest, reginfo *src);
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx);
+void reginfolist_copyregister(reginfolist *rlist, instructionindx iindx, int dest, int src);
 void reginfolist_settype(reginfolist *rlist, int rindx, value type);
 void reginfolist_settypeinfo(reginfolist *rlist, int rindx, value type, regtypeinfo info);
 void reginfolist_incread(reginfolist *rlist, int rindx);
@@ -74,9 +84,7 @@ regcontents reginfolist_regcontents(reginfolist *rlist, int rindx);
 bool reginfolist_source(reginfolist *rlist, int rindx, instructionindx *iindx);
 int reginfolist_countuses(reginfolist *rlist, int rindx);
 int reginfolist_countwrites(reginfolist *rlist, int rindx);
-
-void reginfolist_duplicate(reginfolist *rlist, int rindx);
-void reginfolist_unduplicate(reginfolist *rlist, int rindx);
+bool reginfolist_alias(reginfolist *rlist, int rindx, registerindx *alias);
 
 void reginfolist_invalidate(reginfolist *rlist, regcontents contents, indx indx);
 

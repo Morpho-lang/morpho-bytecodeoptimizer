@@ -12,7 +12,7 @@
 #include "info.h"
 #include "cfgraph.h"
 
-#define OPTIMIZER_VERBOSE
+//#define OPTIMIZER_VERBOSE
 
 /* **********************************************************************
  * Optimizer data structure
@@ -65,6 +65,7 @@ void optimize_error(optimizer *opt, errorid id, ...);
 bool optimize_checkerror(optimizer *opt);
 
 void optimize_write(optimizer *opt, registerindx i, regcontents contents, indx indx);
+void optimize_copyregister(optimizer *opt, registerindx dest, registerindx src);
 void optimize_writevalue(optimizer *opt, registerindx i);
 void optimize_settype(optimizer *opt, registerindx i, value type);
 void optimize_settypeinfo(optimizer *opt, registerindx i, value type, regtypeinfo info);

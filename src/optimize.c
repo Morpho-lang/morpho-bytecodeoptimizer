@@ -133,6 +133,11 @@ void optimize_write(optimizer *opt, registerindx r, regcontents contents, indx i
     reginfolist_write(&opt->rlist, opt->pc, r, contents, ix);
 }
 
+/** Callback function to copy one register fact into another. */
+void optimize_copyregister(optimizer *opt, registerindx dest, registerindx src) {
+    reginfolist_copyregister(&opt->rlist, opt->pc, dest, src);
+}
+
 /** Callback function to set the contents of a register */
 void optimize_writevalue(optimizer *opt, registerindx r) {
     optimize_write(opt, r, REG_VALUE, INSTRUCTIONINDX_EMPTY);
@@ -191,16 +196,16 @@ bool optimize_addconstant(optimizer *opt, value val, indx *out) {
     return true;
 }
 
-/** Checks if a register is empty */
+/** Checks if a register has no semantic fact */
 bool optimize_isempty(optimizer *opt, registerindx i) {
-    regcontents contents=REG_EMPTY;
+    regcontents contents=REG_NOFACT;
     reginfolist_contents(&opt->rlist, i, &contents, NULL);
-    return (contents==REG_EMPTY);
+    return (contents==REG_NOFACT);
 }
 
 /** Checks if a register holds a constant */
 bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
-    regcontents contents=REG_EMPTY;
+    regcontents contents=REG_NOFACT;
     indx ix;
     if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
     
@@ -212,7 +217,7 @@ bool optimize_isconstant(optimizer *opt, registerindx i, indx *out) {
 
 /** Checks if a register holds another register */
 bool optimize_isglobal(optimizer *opt, registerindx i, indx *out) {
-    regcontents contents=REG_EMPTY;
+    regcontents contents=REG_NOFACT;
     indx ix;
     if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
     
@@ -222,16 +227,9 @@ bool optimize_isglobal(optimizer *opt, registerindx i, indx *out) {
     return success;
 }
 
-/** Checks if a register holds another register */
+/** Checks if a register currently aliases another register */
 bool optimize_isregister(optimizer *opt, registerindx i, registerindx *out) {
-    regcontents contents=REG_EMPTY;
-    indx ix;
-    if (!reginfolist_contents(&opt->rlist, i, &contents, &ix)) return false;
-    
-    bool success=(contents==REG_REGISTER);
-    if (success && out) *out = (registerindx) ix;
-    
-    return success;
+    return reginfolist_alias(&opt->rlist, i, out);
 }
 
 /** Returns the content type of a register */
@@ -291,21 +289,21 @@ bool optimize_isused(optimizer *opt, registerindx rindx) {
     return optimize_checkdestusage(opt, opt->currentblk, rindx);
 }
 
-/** Trace back through duplicate registers */
+/** Trace back through aliases to find an original register. */
 registerindx optimize_findoriginalregister(optimizer *opt, registerindx rindx) {
-    registerindx out=rindx;
-    
-    while (optimize_isregister(opt, out, &out)) {
-        if (out==rindx) return out; // Break cycles
+    registerindx out=rindx, next;
+
+    while (optimize_isregister(opt, out, &next)) {
+        if (next==rindx) break; // Break cycles
+        out=next;
     }
-    
+
     return out;
 }
 
-/** Finds whether a register refers to a constant, searching back through other registers */
+/** Finds whether a register refers to a constant. */
 bool optimize_findconstant(optimizer *opt, registerindx i, indx *out) {
-    registerindx orig = optimize_findoriginalregister(opt, i);
-    return optimize_isconstant(opt, orig, out);
+    return optimize_isconstant(opt, i, out);
 }
 
 /** Extracts usage information */
@@ -612,7 +610,7 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
         if (!optimize_isempty(opt, i) &&                // Does the register contain something?
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
             reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
-            reginfolist_regcontents(&blk->rout, i)==REG_EMPTY && // Is it dead at block exit?
+            reginfolist_regcontents(&blk->rout, i)==REG_NOFACT && // Is it dead at block exit?
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
@@ -871,10 +869,10 @@ static void _resolve(int n, block **src, reginfolist *dest) {
         if (_isparam(n, src, i)) continue;
 
         reginfo joined = src[0]->rout.rinfo[i];
-        joined.nread=0;
-        joined.nwrite=0;
-        joined.ndup=0;
-        if (joined.contents==REG_EMPTY || joined.contents==REG_VALUE) {
+        joined.usage=REGUSE_NONE;
+        joined.hasalias=false;
+        joined.alias=0;
+        if (joined.contents==REG_NOFACT || joined.contents==REG_TYPEDVALUE || joined.contents==REG_VALUE) {
             joined.indx=0;
             joined.iindx=INSTRUCTIONINDX_EMPTY;
         }
@@ -884,13 +882,9 @@ static void _resolve(int n, block **src, reginfolist *dest) {
             reginfo_join(&joined, &src[k]->rout.rinfo[i]);
         }
 
-        // Register aliases are not stable across block boundaries because restore/join
-        // does not preserve the duplication bookkeeping needed to repair them.
-        if (joined.contents==REG_REGISTER) {
-            joined.contents=REG_VALUE;
-            joined.indx=0;
-            joined.iindx=INSTRUCTIONINDX_EMPTY;
-        }
+        // Register aliases are local facts; drop them conservatively at block boundaries.
+        joined.hasalias=false;
+        joined.alias=0;
 
         dest->rinfo[i]=joined;
     }
