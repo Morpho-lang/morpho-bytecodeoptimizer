@@ -1,0 +1,8 @@
+
+import bytecodeoptimizer
+
+fn f() {
+    print("foo")
+}
+
+print "ok" // expect: "ok"
