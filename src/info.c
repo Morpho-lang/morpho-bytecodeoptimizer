@@ -7,7 +7,6 @@
 #include "info.h"
 
 DEFINE_VARRAY(methodinfoentry, methodinfoentry)
-
 /* **********************************************************************
  * Globals
  * ********************************************************************** */
@@ -145,6 +144,45 @@ void globalinfolist_show(globalinfolist *glist) {
         if (!MORPHO_ISNIL(type)) morpho_printvalue(NULL, type);
         printf("\n");
     }
+}
+
+/* **********************************************************************
+ * Classes
+ * ********************************************************************** */
+
+/** Initializes a class metadata list. */
+bool classinfolist_init(classinfolist *clist) {
+    dictionary_init(&clist->constructed);
+    return true;
+}
+
+/** Clears a class metadata list. */
+void classinfolist_clear(classinfolist *clist) {
+    dictionary_clear(&clist->constructed);
+}
+
+/** Resets per-pass class metadata. */
+void classinfolist_startpass(classinfolist *clist) {
+    dictionary_clear(&clist->constructed);
+    dictionary_init(&clist->constructed);
+}
+
+/** Increments the construction count for a class. */
+bool classinfolist_incrementconstructed(classinfolist *clist, objectclass *klass) {
+    value key = MORPHO_OBJECT(klass), count = MORPHO_INTEGER(0);
+    if (dictionary_get(&clist->constructed, key, &count) && MORPHO_ISINTEGER(count)) {
+        count = MORPHO_INTEGER(MORPHO_GETINTEGERVALUE(count)+1);
+    } else count = MORPHO_INTEGER(1);
+    return dictionary_insert(&clist->constructed, key, count);
+}
+
+/** Returns the number of constructor calls seen for a class. */
+int classinfolist_countconstructed(classinfolist *clist, objectclass *klass) {
+    value count;
+    if (dictionary_get(&clist->constructed, MORPHO_OBJECT(klass), &count) && MORPHO_ISINTEGER(count)) {
+        return MORPHO_GETINTEGERVALUE(count);
+    }
+    return 0;
 }
 
 /* **********************************************************************

@@ -30,6 +30,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     opt->reachabledirty=true;
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
+    classinfolist_init(&opt->classinfo);
     methodinfolist_init(&opt->methodinfo);
     varray_instructioninit(&opt->insertions);
     
@@ -50,6 +51,7 @@ void optimize_clear(optimizer *opt) {
     dictionary_clear(&opt->reachable);
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
+    classinfolist_clear(&opt->classinfo);
     methodinfolist_clear(&opt->methodinfo);
     varray_instructionclear(&opt->insertions);
     
@@ -105,9 +107,18 @@ int optimize_methodcountowners(optimizer *opt, objectfunction *method) {
     return methodinfolist_countowners(&opt->methodinfo, method);
 }
 
+/* Retrieve the count of constructor calls for a class. */
+int optimize_classcountconstructed(optimizer *opt, objectclass *klass) {
+    return classinfolist_countconstructed(&opt->classinfo, klass);
+}
+
 /* **********************************************************************
  * Optimize a code block
  * ********************************************************************** */
+
+static void optimize_loadblockinput(optimizer *opt, block *blk);
+void optimize_track(optimizer *opt);
+static void _optimize_classinfo_processcomponent(optimizer *opt, value comp, dictionary *components);
 
 /** Raise an error with the optimizer */
 void optimize_error(optimizer *opt, errorid id, ...) {
@@ -406,6 +417,130 @@ bool optimize_deleteinstruction(optimizer *opt, instructionindx indx) {
 /** Gets the global info list */
 globalinfolist *optimize_globalinfolist(optimizer *opt) {
     return &opt->glist;
+}
+
+/* **********************************************************************
+ * Classinfo
+ * ********************************************************************** */
+
+static void _optimize_classinfo_mark(value val, classinfolist *out) {
+    if (MORPHO_ISCLASS(val)) classinfolist_incrementconstructed(out, MORPHO_GETCLASS(val));
+}
+
+static void _optimize_classinfo_markregister(value *regs, registerindx start, int n, classinfolist *out) {
+    for (registerindx i=0; i<n; i++) _optimize_classinfo_mark(regs[start+i], out);
+}
+
+static void _optimize_classinfo_markconstants(varray_value *konst, classinfolist *out) {
+    for (unsigned int i=0; i<konst->count; i++) _optimize_classinfo_mark(konst->data[i], out);
+}
+
+/* Track direct top-level constructor flows through constants, moves, and globals. */
+static void _optimize_classinfo_scanfunction(optimizer *opt, objectfunction *func, classinfolist *out) {
+    value regs[MORPHO_MAXREGISTERS];
+    value *globals = MORPHO_MALLOC(sizeof(value)*opt->prog->globals.count);
+
+    for (int i=0; i<MORPHO_MAXREGISTERS; i++) regs[i]=MORPHO_NIL;
+    for (int i=0; i<opt->prog->globals.count; i++) globals[i]=MORPHO_NIL;
+
+    for (instructionindx i=func->entry; i<opt->prog->code.count; i++) {
+        instruction instr = opt->prog->code.data[i];
+        instruction op = DECODE_OP(instr);
+        registerindx a = DECODE_A(instr);
+        int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+        switch (op) {
+            case OP_LCT: regs[a] = func->konst.data[DECODE_Bx(instr)]; break;
+            case OP_MOV: regs[a] = regs[DECODE_B(instr)]; break;
+            case OP_SGL: globals[DECODE_Bx(instr)] = regs[DECODE_A(instr)]; break;
+            case OP_LGL: regs[a] = globals[DECODE_Bx(instr)]; break;
+            case OP_INVOKE:
+            case OP_METHOD:
+            case OP_CALL: {
+                registerindx receiver = a + (op==OP_CALL ? 0 : 1);
+
+                _optimize_classinfo_mark(regs[receiver], out);
+                _optimize_classinfo_markregister(regs, receiver+1, nargs+2*nopt, out);
+                regs[receiver] = MORPHO_NIL;
+                break;
+            }
+            default: {
+                registerindx overwrites;
+                if (opcode_overwritesforinstruction(instr, &overwrites)) regs[overwrites]=MORPHO_NIL;
+                break;
+            }
+        }
+    }
+
+    MORPHO_FREE(globals);
+}
+
+static void _optimize_classinfo_processcomponent(optimizer *opt, value comp, dictionary *components) {
+    if (!MORPHO_ISCALLABLE(comp) || dictionary_get(components, comp, NULL)) return;
+    dictionary_insert(components, comp, MORPHO_NIL);
+
+    if (MORPHO_ISFUNCTION(comp)) {
+        objectfunction *func = MORPHO_GETFUNCTION(comp);
+
+        if (func!=opt->prog->global) {
+            /* Any class captured by a non-global function can be used in
+               arbitrary ways, so conservatively keep it live. */
+            _optimize_classinfo_markconstants(&func->konst, &opt->classinfo);
+        } else {
+            _optimize_classinfo_scanfunction(opt, func, &opt->classinfo);
+        }
+
+        for (unsigned int i=0; i<func->konst.count; i++) {
+            _optimize_classinfo_processcomponent(opt, func->konst.data[i], components);
+        }
+    } else if (MORPHO_ISMETAFUNCTION(comp)) {
+        objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(comp);
+        for (unsigned int i=0; i<mfn->fns.count; i++) {
+            _optimize_classinfo_processcomponent(opt, mfn->fns.data[i], components);
+        }
+    } else if (MORPHO_ISCLASS(comp)) {
+        objectclass *klass = MORPHO_GETCLASS(comp);
+        for (unsigned int i=0; i<klass->methods.capacity; i++) {
+            if (!MORPHO_ISNIL(klass->methods.contents[i].key)) {
+                _optimize_classinfo_processcomponent(opt, klass->methods.contents[i].val, components);
+            }
+        }
+    }
+}
+
+static void optimize_classinfo(optimizer *opt) {
+    dictionary components;
+
+    classinfolist_startpass(&opt->classinfo);
+    dictionary_init(&components);
+    _optimize_classinfo_processcomponent(opt, MORPHO_OBJECT(opt->prog->global), &components);
+    dictionary_clear(&components);
+}
+
+static bool _optimize_isdeadclass(optimizer *opt, objectclass *klass) {
+    if (optimize_classcountconstructed(opt, klass)>0) return false;
+
+    for (unsigned int i=0; i<klass->children.count; i++) {
+        value child = klass->children.data[i];
+
+        if (MORPHO_ISCLASS(child) &&
+            !_optimize_isdeadclass(opt, MORPHO_GETCLASS(child))) return false;
+    }
+
+    return true;
+}
+
+static bool _optimize_isdeadclassmethod(optimizer *opt, block *blk) {
+    return (blk->func->klass &&
+            _optimize_isdeadclass(opt, blk->func->klass));
+}
+
+static void optimize_prunedeadclassblocks(optimizer *opt) {
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
+
+        if (block_isentry(blk) && _optimize_isdeadclassmethod(opt, blk)) blk->isentry=false;
+    }
 }
 
 void _optusagefn(registerindx r, void *ref) {
@@ -1226,11 +1361,13 @@ bool optimize(program *in) {
     optimizer_init(&opt, in);
     
     optimize_methodinfo(&opt);
+    optimize_classinfo(&opt);
     
     if (opt.verbose) morpho_disassemble(NULL, in, NULL);
     
     // Build control flow graph
     cfgraph_build(in, &opt.graph, opt.verbose);
+    optimize_prunedeadclassblocks(&opt);
     
     // Perform optimization passes
     for (int i=0; i<3 && !optimize_checkerror(&opt); i++) {

@@ -56,6 +56,21 @@ void globalinfolist_startpass(globalinfolist *glist);
 void globalinfolist_show(globalinfolist *glist);
 
 /* **********************************************************************
+ * Information about classes
+ * ********************************************************************** */
+
+typedef struct {
+    dictionary constructed;
+} classinfolist;
+
+bool classinfolist_init(classinfolist *clist);
+void classinfolist_clear(classinfolist *clist);
+void classinfolist_startpass(classinfolist *clist);
+
+bool classinfolist_incrementconstructed(classinfolist *clist, objectclass *klass);
+int classinfolist_countconstructed(classinfolist *clist, objectclass *klass);
+
+/* **********************************************************************
  * Information about methods/functions
  * ********************************************************************** */
 

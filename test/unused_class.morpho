@@ -1,0 +1,18 @@
+
+import bytecodeoptimizer
+
+class A {
+    init() {
+        print("A")
+    }
+
+    foo() {
+        print("foo")
+    }
+
+    boo() {
+        print("boo")
+    }   
+}
+
+print "ok" // expect: "ok"

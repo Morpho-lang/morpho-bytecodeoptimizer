@@ -29,6 +29,7 @@ typedef struct {
 
     reginfolist rlist; /** Used to track register state */
     globalinfolist glist; /** Used to track globals */
+    classinfolist classinfo; /** Store class construction metadata */
     methodinfolist methodinfo; /** Store function/method metadata */
     
     int pass; /** Count passes */
@@ -105,6 +106,7 @@ void optimize_insertinstructions(optimizer *opt, int n, instruction *instr);
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 
 globalinfolist *optimize_globalinfolist(optimizer *opt);
+int optimize_classcountconstructed(optimizer *opt, objectclass *klass);
 
 void optimize_disassemble(optimizer *opt);
 
