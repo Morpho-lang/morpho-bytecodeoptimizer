@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Ensure Morpho example files import bytecodeoptimizer.
+"""Ensure Morpho source files import bytecodeoptimizer.
 
-This script walks an examples tree looking for .morpho files and inserts:
+This script walks one or more source trees looking for .morpho files and
+inserts:
 
     import bytecodeoptimizer
 
@@ -16,19 +17,23 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_SOURCE_ROOT = Path("test") / "examples"
+DEFAULT_SOURCE_ROOTS = [Path("test") / "examples", Path("test") / "benchmarks"]
 IMPORT_LINE = "import bytecodeoptimizer"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Add 'import bytecodeoptimizer' to Morpho example files when missing."
+        description="Add 'import bytecodeoptimizer' to Morpho source files when missing."
     )
     parser.add_argument(
         "--source-root",
+        dest="source_roots",
+        action="append",
         type=Path,
-        default=DEFAULT_SOURCE_ROOT,
-        help="Root directory to scan for .morpho files. Defaults to 'test/examples'.",
+        help=(
+            "Root directory to scan for .morpho files. "
+            "May be supplied multiple times. Defaults to 'test/examples' and 'test/benchmarks'."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -38,8 +43,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def discover_inputs(source_root: Path) -> list[Path]:
-    return sorted(path for path in source_root.rglob("*.morpho") if path.is_file())
+def discover_inputs(source_roots: list[Path]) -> list[tuple[Path, Path]]:
+    inputs: list[tuple[Path, Path]] = []
+
+    for source_root in source_roots:
+        for path in sorted(source_root.rglob("*.morpho")):
+            if path.is_file():
+                inputs.append((source_root, path))
+
+    return inputs
 
 
 def has_optimizer_import(lines: list[str]) -> bool:
@@ -82,26 +94,29 @@ def add_import(path: Path, dry_run: bool) -> bool:
 
 def main() -> int:
     args = parse_args()
+    source_roots = [path.resolve() for path in (args.source_roots or DEFAULT_SOURCE_ROOTS)]
 
-    source_root = args.source_root.resolve()
-    if not source_root.exists():
-        print(f"Source root does not exist: {source_root}", file=sys.stderr)
+    missing = [path for path in source_roots if not path.exists()]
+    if missing:
+        for path in missing:
+            print(f"Source root does not exist: {path}", file=sys.stderr)
         return 2
 
-    inputs = discover_inputs(source_root)
+    inputs = discover_inputs(source_roots)
     if not inputs:
-        print(f"No .morpho files found under {source_root}", file=sys.stderr)
+        print("No .morpho files found under the selected source roots.", file=sys.stderr)
         return 2
 
     modified = 0
-    print(f"Scanning {source_root}")
+    print("Scanning:")
+    for source_root in source_roots:
+        print(f"  {source_root}")
 
-    for path in inputs:
-        rel = path.relative_to(source_root)
+    for source_root, path in inputs:
         if add_import(path, args.dry_run):
             modified += 1
             action = "would update" if args.dry_run else "updated"
-            print(f"{action}: {rel}")
+            print(f"{action}: {path.relative_to(source_root)}")
 
     if args.dry_run:
         print(f"{modified} file(s) would be updated.")

@@ -9,3 +9,4 @@ test/examples
 test/disassembly_snapshots/*
 *.png
 *.pov
+/test/benchmarks

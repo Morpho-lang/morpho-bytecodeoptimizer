@@ -175,3 +175,112 @@ So the practical roadmap is:
 2. Proper inter-block dataflow to fixpoint.
 3. Interprocedural type propagation and specialization/inlining.
 4. High-level reductions like Range loop lowering.
+
+==================
+
+1. Remove dead copies created by consumer-side register replacement.
+Evidence: arithmetic​_identities​.optimized​.txt contains patterns like mov r2, r0 followed by print r0, where the destination copy is no longer used.
+Likely area: strategy.c and optimize.c.
+Improvement: after strategy​_register​_replacement, re-check whether the producer mov became dead and delete it in the same pass/block.
+
+2. Make method-resolution rewrites less churn-heavy.
+Evidence: aggregate invoke -> method conversion is large, but many rewrites insert lct <fn>; method ...; lct <label> scaffolding and sometimes increase code size.
+Likely area: strategy.c.
+Improvement: only apply strategy​_method​_resolution when the restored label is actually needed later, or when the resolved form is expected to enable another profitable rewrite.
+
+3. Improve loop-header join precision.
+Evidence: for​_in​.morpho folds setup aggressively, but loop-body invoke and branch structure remain largely unchanged because facts collapse at the backedge.
+Likely area: reginfo.c and optimize.c.
+Improvement: preserve more type information across joins, especially for stable class/type facts and loop-invariant values.
+
+4. Strengthen the type join lattice before trying richer value propagation.
+Evidence: current joins quickly degrade to plain v or tv even when predecessor facts are compatible at the type level.
+Likely area: reginfo.c.
+Improvement: join exact/subtype facts more intelligently instead of requiring exact type equality everywhere.
+
+5. Add a post-rewrite cleanup pass for duplicate lct/mov residue.
+Evidence: snapshots show many transformations succeed but leave nearby structural noise, especially after insertions and register propagation.
+Likely area: strategy.c.
+Improvement: add a final low-cost canonicalization sweep focused on nop, self-copy, dead mov, repeated lct, and now-unused temporaries.
+
+6. Revisit duplicate-load heuristics for code size versus later simplification.
+Evidence: mov count rises substantially (+24146) while lct falls, which is often fine but not always better if the move does not unlock more cleanup.
+Likely area: strategy.c.
+Improvement: prefer replacement with an existing register only when that alias is likely to survive long enough to pay off.
+
+7. Add reporting around which strategies fire most and what net deltas they cause.
+Evidence: the snapshot database gives strong external evidence, but it is still hard to attribute gains/regressions precisely.
+Likely area: strategy.c and optimize.h.
+Improvement: count strategy applications and optionally record per-strategy instruction deltas in verbose mode.
+
+8. Make method-resolution and metafunction reductions more selective in loops.
+Evidence: first-iteration setup often improves, but repeated loop bodies still carry dynamic forms and some inserted scaffolding.
+Likely area: strategy.c and strategy.c.
+Improvement: bias these rewrites toward cases where the result becomes loop-invariant or can be hoisted.
+
+9. Add targeted regression checks based on the snapshot patterns you now have.
+Evidence: the snapshot corpus already exposed concrete canonicalization misses.
+Improvement: keep a few representative files as optimizer regression fixtures:
+• arithmetic​_identities​.morpho
+• for​_in​.morpho
+• method​_lookup​.morpho
+• testsuite​/tests​/for​_in​/forin​_index​.morpho
+
+10. Defer richer constant/value propagation until cleanup and join precision improve.
+Evidence: the optimizer already changes 930 files and shrinks most of them; the next bottleneck is not lack of transformations, but loss of precision and residual churn.
+Improvement: prioritize “cleaner existing rewrites” and “better joins” before adding more peephole rules.
+
+========
+
+1. OP​_​CALLR
+Call a known resolved callable already in a register, without the extra method-binding scaffolding.
+Use case:
+• after invoke -> method resolution
+• when the callee is already known and the receiver/args are laid out
+
+Shape:
+• callr r​Fn, nargs, nopt
+Benefit:
+• lets optimization target a tighter canonical form after method resolution
+
+2. OP​_​METHODL
+Resolve and call a method using an interned label constant in one step.
+Use case:
+• common lct <label>; invoke
+Shape:
+• methodl r​Recv​Base, label​Const, nargs, nopt
+Benefit:
+• removes explicit label materialization into a register
+• good for hot loops where the label is constant but full resolution is not possible
+
+3. OP​_​LIXC
+Load a single indexed component with a tighter contract for stable container types.
+Use case:
+• heavy repeated indexing in matrix/vector kernels
+Shape:
+• lixc r​Out, r​Obj, r​Index
+Benefit:
+• a place for a fast path on common numeric/container objects
+
+4. OP​_​LIX2
+Direct two-index access for matrix-like objects.
+Use case:
+• repeated nested index setup in kernels
+Shape:
+• lix2 r​Out, r​Obj, r​I, r​J
+Benefit:
+• avoids building or reusing extra temporaries for multi-index access
+• matches your earlier note about richer instruction formats
+
+5. OP​_​CALLM
+Call a known method target with receiver already paired.
+Use case:
+• after method resolution when you know the exact method function and receiver
+Shape:
+• callm r​Method, r​Recv​Base, nargs, nopt
+Benefit:
+• avoids re-binding or generic invoke path
+• clearer target for specialization than current method/invoke mix
+
+6. OP​_​ADDI / OP​_​MULI / similar immediate forms
+Use case:
