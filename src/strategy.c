@@ -402,6 +402,29 @@ bool _isfoldsafeconstructortype(value v) {
             MORPHO_ISEQUAL(v, typefloat));
 }
 
+static bool _israngeenumerate(value fn, value recvtype) {
+    if (!MORPHO_ISEQUAL(recvtype, typerange) || !MORPHO_ISBUILTINFUNCTION(fn)) return false;
+
+    objectbuiltinfunction *builtin = MORPHO_GETBUILTINFUNCTION(fn);
+    return (MORPHO_ISSTRING(builtin->name) &&
+            strcmp(MORPHO_GETCSTRING(builtin->name), "enumerate")==0);
+}
+
+/* Restrict constant method folding to builtin methods that are pure and return immutable values.
+   Range.enumerate currently lacks a return annotation, but its result is guaranteed immutable. */
+static bool _isfoldsafeconstantmethod(value fn, value recvtype) {
+    if (!MORPHO_ISBUILTINFUNCTION(fn)) return false;
+    if (_israngeenumerate(fn, recvtype)) return true;
+
+    objectbuiltinfunction *builtin = MORPHO_GETBUILTINFUNCTION(fn);
+    if (!(builtin->flags & MORPHO_FN_PUREFN)) return false;
+
+    value rettype = signature_getreturntype(&builtin->sig);
+    if (_isfoldsafeconstructortype(rettype)) return true;
+
+    return false;
+}
+
 bool strategy_constant_immutable(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     
@@ -450,6 +473,40 @@ bool strategy_constant_immutable(optimizer *opt) {
         }
     }
     
+    return success;
+}
+
+/* -------------------------------------
+ * Constant Immutable Method
+ * ------------------------------------- */
+
+bool strategy_constant_method(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx rA=DECODE_A(instr), receiver = rA+1;
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    int nregs = nargs + 2*nopt + 2;
+    indx cindx[nregs];
+    for (int i=0; i<nregs; i++) CHECK(optimize_isconstant(opt, rA + i, cindx + i));
+
+    value fn = optimize_getconstant(opt, cindx[0]);
+    value recv = optimize_getconstant(opt, cindx[1]), type = MORPHO_NIL;
+    CHECK(optimize_typefromvalue(recv, &type));
+    CHECK(_isfoldsafeconstantmethod(fn, type));
+
+    instruction prog[nregs + 2];
+    for (int i=0; i<nregs; i++) prog[i] = ENCODE_LONG(OP_LCT, i, (instruction) cindx[i]);
+    prog[nregs] = ENCODE(OP_METHOD, 0, (instruction) nargs, (instruction) nopt);
+    prog[nregs + 1] = ENCODE_BYTE(OP_END);
+
+    value new = MORPHO_NIL;
+    bool success = optimize_evalsubprogram(opt, prog, 1, &new);
+
+    if (success && !optimize_replacewithloadconstant(opt, receiver, new)) {
+        morpho_freeobject(new);
+        success=false;
+    }
+
     return success;
 }
 
@@ -655,6 +712,7 @@ optimizationstrategy strategies[] = {
     { OP_LUP,  strategy_duplicate_load,                   0 },
     { OP_LIX,  strategy_load_index_list,                  0 },
     { OP_CALL, strategy_constant_immutable,               0 },
+    { OP_METHOD, strategy_constant_method,                0 },
     { OP_INVOKE, strategy_method_resolution,              0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     { OP_CALL, strategy_self_dispatch,                    0 },

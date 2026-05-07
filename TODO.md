@@ -284,3 +284,82 @@ Benefit:
 
 6. OP​_​ADDI / OP​_​MULI / similar immediate forms
 Use case:
+
+========
+
+ LICM / loop​-invariant hoisting: best immediate next pass. The corpus shows repeated invariant lct for functions, selectors, range helpers, and constants inside hot loops.
+• Cleanup after folds: especially for cases like Tuple​Creation, where a successful fold leaves dead argument setup behind.
+• IPA / call​-boundary type propagation: very promising after LICM. The annotated Fannkuch result strongly suggests parameter type propagation into callees will pay off.
+• Inlining of tiny direct callees: especially for patterns like trivial f(x) { return x } in hot loops and metafunction benchmarks.
+• Specialized call opcodes: method1 and call1 look especially justified by the corpus; call2, call0, and method0 are also attractive.
+• Mutable​-constructor lowering: List​Creation shows a clear gap versus tuples. The likely direction is specialized list construction or temporary-list analysis, not tuple-style constant folding.
+• Temporary​-object analysis: identify non-escaping temporaries and route eligible constructors to arena-based or specialized allocation paths.
+• Late dead​-function pruning: probably as a byproduct of IPA rather than an early standalone pass.
+• Property​-slot lowering: long-term high-payoff idea if exact receiver type plus stable layout can turn lpr/spr into indexed access.
+
+What The Evidence Says
+• Foundational intraprocedural work is largely paying off already:
+   • inter-block dataflow
+   • loop-sensitive joins
+   • dispatch specialization
+   • dead-class pruning
+• The bottleneck has shifted from discovering facts to exploiting them.
+• Benchmarks suggest:
+   • big wins on structural/dynamic overhead cases
+   • modest wins on numeric kernels
+   • compile-time cost is still too high for short programs, so optimizer self-cost will matter later
+
+Recommended Order
+1. LICM
+2. post​-fold cleanup / rematerialization cleanup
+3. IPA for parameter and return types
+4. tiny​-function inlining
+5. specialized call​/method opcodes
+6. temporary​-object / specialized allocation work
+7. property​-slot lowering
+
+
+======
+
+VM design lessons:
+
+A lot. The optimizer work has already surfaced several VM design lessons.
+
+What The Current Work Says
+• Cross-block and loop-stable facts matter a lot.
+The VM and bytecode should make it easy to preserve and exploit simple facts like constant values, exact types, known callees, and invariant loads.
+• Common call shapes dominate.
+1-arg calls and methods are extremely common, and optional args are rare. A redesigned VM should not make the hottest call path pay for the most general one.
+• Dynamic dispatch is worth specializing.
+The big invoke -> method wins show that method lookup overhead is real and that exact receiver/selector knowledge is very valuable.
+• Object/property lookup is probably too expensive.
+If property access goes through dictionaries, that is likely a structural runtime tax. A redesigned VM should strongly consider slot-based object layouts.
+• Temporary allocation matters.
+Benchmarks like tuple/list creation suggest constructor and short-lived object overhead are important. A redesign should think hard about temporary allocation paths from the start.
+• Mutability distinctions matter.
+Tuples and lists want different optimizations. A good VM design should expose immutable vs mutable construction cleanly.
+• Loop-body overhead is where many remaining wins live.
+The bytecode and runtime should make hoisting, direct calls, and reduced staging natural rather than exceptional.
+• Whole-program optimization cost matters.
+For short programs, optimizer latency can outweigh runtime gains. A redesign should consider how much performance should come from cheap execution-path improvements vs expensive compile-time reasoning.
+
+Likely VM Design Implications
+• Specialized call opcodes for common arities, especially 0, 1, and probably 2.
+• A faster direct-call/method path with less generic staging.
+• More compact opcode encodings for common instruction shapes.
+• Slot-based field/property access where layout is known.
+• Explicit fast paths for common constructors and maybe temporary-object allocation.
+• Better separation between general dynamic machinery and common monomorphic cases.
+• Bytecode forms that make invariants and direct callees easier to encode and preserve.
+
+What Not To Throw Away
+• The current optimizer work is not wasted even if the VM changes.
+It has already told you:
+• which patterns dominate real code
+• which abstractions are expensive
+• where type and call-boundary information matter most
+• which optimizations are structurally high value
+
+So if you redesign the VM, the main lesson is:
+• optimize the common dynamic cases into first-class VM concepts
+• do not build the whole execution model around the most general case and hope the optimizer can recover everything later
