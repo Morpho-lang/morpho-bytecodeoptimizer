@@ -737,7 +737,10 @@ static bool _isdeadstoresafearithmetictype(value type) {
 
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx r) {
     instruction op = DECODE_OP(instr);
-    if (op<OP_ADD || op>OP_POW) return true;
+    
+    if (op==OP_NOP || op==OP_MOV || op==OP_LCT) return true;
+    if (op<OP_ADD || op>OP_POW) return false;
+    
     return _isdeadstoresafearithmetictype(optimize_type(opt, r));
 }
 
@@ -751,7 +754,6 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
         if (!optimize_isempty(opt, i) &&                // Does the register contain something?
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
             reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
-            reginfolist_regcontents(&blk->rout, i)==REG_NOFACT && // Is it dead at block exit?
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
