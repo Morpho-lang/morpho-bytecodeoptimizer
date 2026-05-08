@@ -118,16 +118,6 @@ void optimize_methodinfo(optimizer *opt) {
     }
 }
 
-/* Retrieve the count of method owners */
-int optimize_methodcountowners(optimizer *opt, objectfunction *method) {
-    return functioninfolist_countowners(&opt->functioninfo, method);
-}
-
-/* Retrieve the count of constructor calls for a class. */
-int optimize_classcountconstructed(optimizer *opt, objectclass *klass) {
-    return classinfolist_countconstructed(&opt->classinfo, klass);
-}
-
 /* **********************************************************************
  * Optimize a code block
  * ********************************************************************** */
@@ -672,15 +662,12 @@ static void _optimize_classinfo_processcomponent(optimizer *opt, value comp, dic
 
     if (MORPHO_ISFUNCTION(comp)) {
         objectfunction *func = MORPHO_GETFUNCTION(comp);
+        bool isglobal = (func==opt->prog->global);
 
-        if (func!=opt->prog->global) {
+        if (!isglobal) {
             _optimize_classinfo_markconstants(&func->konst, &opt->classinfo);
         }
-        if (func!=opt->prog->global) {
-            _optimize_classinfo_scanfunction(opt, func, &opt->classinfo, globals, false);
-        } else {
-            _optimize_classinfo_scanfunction(opt, func, &opt->classinfo, globals, true);
-        }
+        _optimize_classinfo_scanfunction(opt, func, &opt->classinfo, globals, isglobal);
 
         for (unsigned int i=0; i<func->konst.count; i++) {
             _optimize_classinfo_processcomponent(opt, func->konst.data[i], components, globals);
@@ -703,34 +690,48 @@ static void optimize_classinfo(optimizer *opt) {
     dictionary_clear(&components);
 }
 
-static bool _optimize_isdeadclass(optimizer *opt, objectclass *klass) {
-    if (optimize_classcountconstructed(opt, klass)>0) return false;
+static bool _optimize_isdeadclass(optimizer *opt, objectclass *klass, dictionary *cache) {
+    value cached;
+    if (dictionary_get(cache, MORPHO_OBJECT(klass), &cached) && MORPHO_ISINTEGER(cached)) {
+        return (MORPHO_GETINTEGERVALUE(cached)!=0);
+    }
+
+    if (classinfolist_countconstructed(&opt->classinfo, klass)>0) return false;
 
     for (unsigned int i=0; i<klass->children.count; i++) {
         value child = klass->children.data[i];
 
         if (MORPHO_ISCLASS(child) &&
-            !_optimize_isdeadclass(opt, MORPHO_GETCLASS(child))) return false;
+            !_optimize_isdeadclass(opt, MORPHO_GETCLASS(child), cache)) {
+            dictionary_insert(cache, MORPHO_OBJECT(klass), MORPHO_INTEGER(0));
+            return false;
+        }
     }
 
+    dictionary_insert(cache, MORPHO_OBJECT(klass), MORPHO_INTEGER(1));
     return true;
 }
 
-static bool _optimize_isdeadclassmethod(optimizer *opt, block *blk) {
+static bool _optimize_isdeadclassmethod(optimizer *opt, block *blk, dictionary *cache) {
     return (blk->func->klass &&
-            _optimize_isdeadclass(opt, blk->func->klass));
+            _optimize_isdeadclass(opt, blk->func->klass, cache));
 }
 
 static void optimize_prunedeadclassblocks(optimizer *opt) {
+    dictionary cache;
+    dictionary_init(&cache);
+
     for (blockindx i=0; i<opt->graph.count; i++) {
         block *blk = &opt->graph.data[i];
 
-        if (!block_isentry(blk) || !_optimize_isdeadclassmethod(opt, blk)) continue;
+        if (!block_isentry(blk) || !_optimize_isdeadclassmethod(opt, blk, &cache)) continue;
 
         blk->isentry=false;
         opt->reachabledirty=true;
         _pruneunreachableblock(opt, i);
     }
+
+    dictionary_clear(&cache);
 }
 
 void _optusagefn(registerindx r, void *ref) {

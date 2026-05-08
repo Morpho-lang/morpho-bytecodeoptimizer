@@ -119,7 +119,6 @@ void optimize_insertinstructions(optimizer *opt, int n, instruction *instr);
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 
 globalinfolist *optimize_globalinfolist(optimizer *opt);
-int optimize_classcountconstructed(optimizer *opt, objectclass *klass);
 
 void optimize_disassemble(optimizer *opt);
 
