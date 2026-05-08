@@ -12,7 +12,7 @@
 #include "info.h"
 #include "cfgraph.h"
 
-#define OPTIMIZER_VERBOSE
+//#define OPTIMIZER_VERBOSE
 
 /* **********************************************************************
  * Optimizer data structure

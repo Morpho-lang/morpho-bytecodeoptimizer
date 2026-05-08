@@ -1018,14 +1018,22 @@ static void _optimize_markloopblocks(optimizer *opt, block *header, blockindx cu
     }
 }
 
+static bool _anyblockwrites(int nblk, block **blk, registerindx r) {
+    for (int i=0; i<nblk; i++) {
+        if (block_writes(blk[i], r)) return true;
+    }
+
+    return false;
+}
+
 static bool _loopwrites(optimizer *opt, block *header, registerindx r) {
     for (int i=0; i<header->loopblocks.capacity; i++) {
         value key = header->loopblocks.contents[i].key;
         block *blk;
 
         if (!MORPHO_ISINTEGER(key)) continue;
-        if (!cfgraph_indx(&opt->graph, (blockindx) MORPHO_GETINTEGERVALUE(key), &blk)) continue;
-        if (block_writes(blk, r)) return true;
+        if (cfgraph_indx(&opt->graph, (blockindx) MORPHO_GETINTEGERVALUE(key), &blk) &&
+            block_writes(blk, r)) return true;
     }
 
     return false;
@@ -1039,19 +1047,22 @@ static bool _isintfact(block *blk, reginfo *info) {
     return MORPHO_ISINTEGER(konst);
 }
 
-/* Recognize loop-carried integer updates of the form `r = r + k` or `r = k + r`,
+/* Recognize loop-carried integer updates of the form `r = r +/- k` or `r = k + r`,
    where `k` is itself known to be an integer fact. */
-static bool _isintpreservingloopadd(optimizer *opt, block *blk, registerindx r) {
+static bool _isintpreservingloopupdate(optimizer *opt, block *blk, registerindx r) {
     reginfo *info = &blk->rout.rinfo[r];
+    instruction op, write;
+
     if (info->iindx==INSTRUCTIONINDX_EMPTY) return false;
 
-    instruction write = optimize_getinstructionat(opt, info->iindx);
-    if (DECODE_OP(write)!=OP_ADD || DECODE_A(write)!=r) return false;
+    write = optimize_getinstructionat(opt, info->iindx);
+    op = DECODE_OP(write);
+    if ((op!=OP_ADD && op!=OP_SUB) || DECODE_A(write)!=r) return false;
 
     registerindx other;
     if (DECODE_B(write)==r) {
         other=DECODE_C(write);
-    } else if (DECODE_C(write)==r) {
+    } else if (op==OP_ADD && DECODE_C(write)==r) {
         other=DECODE_B(write);
     } else return false;
 
@@ -1214,7 +1225,7 @@ static void _resolveloopheader(optimizer *opt, block *blk, int nsrc, block **src
 
         preserve = _isintfact(blk, &baseline);
         for (int k=0; preserve && k<nback; k++) {
-            preserve=_isintpreservingloopadd(opt, backpred[k], i);
+            preserve=_isintpreservingloopupdate(opt, backpred[k], i);
         }
 
         if (preserve) {
@@ -1324,9 +1335,14 @@ static void optimize_queuesuccessors(optimizer *opt, block *blk, varray_instruct
 /** Runs inter-block dataflow until block input and output facts converge. */
 static void optimize_dataflow(optimizer *opt) {
     varray_instructionindx worklist;
+    bool visited[opt->graph.count];
     varray_instructionindxinit(&worklist);
 
     if (opt->verbose) printf("===Dataflow===\n");
+
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        visited[i]=false;
+    }
 
     for (blockindx i=0; i<opt->graph.count; i++) { // Add entry points
         if (block_isentry(&opt->graph.data[i])) {
@@ -1343,10 +1359,14 @@ static void optimize_dataflow(optimizer *opt) {
         varray_instructionindxpop(&worklist, &indx);
         block *blk;
         reginfolist oldrin, oldrout;
+        bool firstvisit;
         bool rinchanged, routchanged;
 
         if (!cfgraph_indx(&opt->graph, indx, &blk)) continue;
         if (!optimize_blockisreachable(opt, blk)) continue;
+
+        firstvisit = !visited[indx];
+        visited[indx]=true;
 
         reginfolist_init(&oldrin, blk->func->nregs);
         reginfolist_init(&oldrout, blk->func->nregs);
@@ -1376,7 +1396,7 @@ static void optimize_dataflow(optimizer *opt) {
         reginfolist_clear(&oldrin);
         reginfolist_clear(&oldrout);
 
-        if (routchanged) optimize_queuesuccessors(opt, blk, &worklist);
+        if (firstvisit || routchanged) optimize_queuesuccessors(opt, blk, &worklist);
     }
 
     varray_instructionindxclear(&worklist);
