@@ -1029,6 +1029,43 @@ static bool _loopwrites(optimizer *opt, block *header, registerindx r) {
     return false;
 }
 
+static bool _isintfact(block *blk, reginfo *info) {
+    if (info->typeinfo==REGTYPE_EXACT && MORPHO_ISEQUAL(info->type, typeint)) return true;
+    if (info->contents!=REG_CONSTANT) return false;
+
+    value konst = block_getconstant(blk, info->indx);
+    return MORPHO_ISINTEGER(konst);
+}
+
+/* Recognize loop-carried integer updates of the form `r = r + k` or `r = k + r`,
+   where `k` is itself known to be an integer fact. */
+static bool _isintpreservingloopadd(optimizer *opt, block *blk, registerindx r) {
+    reginfo *info = &blk->rout.rinfo[r];
+    if (info->iindx==INSTRUCTIONINDX_EMPTY) return false;
+
+    instruction write = optimize_getinstructionat(opt, info->iindx);
+    if (DECODE_OP(write)!=OP_ADD || DECODE_A(write)!=r) return false;
+
+    registerindx other;
+    if (DECODE_B(write)==r) {
+        other=DECODE_C(write);
+    } else if (DECODE_C(write)==r) {
+        other=DECODE_B(write);
+    } else return false;
+
+    if (other>=blk->rout.nreg) return false;
+
+    return _isintfact(blk, &blk->rout.rinfo[other]);
+}
+
+static void _preserveexactintfact(reginfo *info) {
+    info->contents=REG_TYPEDVALUE;
+    info->indx=0;
+    info->iindx=INSTRUCTIONINDX_EMPTY;
+    info->hasalias=false;
+    info->alias=0;
+}
+
 /** Builds loop-body metadata for each structural loop header. */
 void optimize_loopcandidates_finalize(optimizer *opt) {
     for (int i=0; i<opt->graph.count; i++) {
@@ -1169,6 +1206,17 @@ static void _resolveloopheader(optimizer *opt, block *blk, int nsrc, block **src
         preserve = !_loopwrites(opt, blk, i);
 
         if (preserve) {
+            dest->rinfo[i]=baseline;
+            continue;
+        }
+
+        preserve = _isintfact(blk, &baseline);
+        for (int k=0; preserve && k<nback; k++) {
+            preserve=_isintpreservingloopadd(opt, backpred[k], i);
+        }
+
+        if (preserve) {
+            _preserveexactintfact(&baseline);
             dest->rinfo[i]=baseline;
             continue;
         }

@@ -511,6 +511,84 @@ bool strategy_constant_method(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Range enumerate reduction
+ * ------------------------------------- */
+
+static bool _isunitrangestep(objectrange *range) {
+    return (MORPHO_ISNIL(range->step) ||
+            (MORPHO_ISINTEGER(range->step) && MORPHO_GETINTEGERVALUE(range->step)==1) ||
+            (MORPHO_ISFLOAT(range->step) && MORPHO_GETFLOATVALUE(range->step)==1.0));
+}
+
+static bool _uniquesourceblock(optimizer *opt, block *blk, block **out) {
+    if (blk->src.count!=1) return false;
+
+    for (int i=0; i<blk->src.capacity; i++) {
+        value key = blk->src.contents[i].key;
+        if (MORPHO_ISINTEGER(key) &&
+            cfgraph_indx(&opt->graph, (blockindx) MORPHO_GETINTEGERVALUE(key), out)) return true;
+    }
+
+    return false;
+}
+
+static bool _rangeenumerateindex(optimizer *opt, instruction instr, objectrange *range, registerindx *out) {
+    registerindx rA = DECODE_A(instr), receiver = rA+1, arg = rA+2, origarg;
+    block *src;
+
+    if (DECODE_B(instr)!=1 || DECODE_C(instr)!=0) return false;
+    if (!_uniquesourceblock(opt, opt->currentblk, &src)) return false;
+    if (src->end<=src->start) return false;
+
+    instruction branch = optimize_getinstructionat(opt, src->end);
+    instruction cmp = optimize_getinstructionat(opt, src->end-1);
+    if (DECODE_OP(cmp)!=OP_LT) return false;
+    if (DECODE_OP(branch)!=OP_BIF && DECODE_OP(branch)!=OP_BIFF) return false;
+    if (DECODE_A(branch)!=DECODE_A(cmp)) return false;
+
+    if (!optimize_isregister(opt, arg, &origarg) || origarg!=DECODE_B(cmp)) return false;
+
+    regcontents contents;
+    indx kindx;
+    if (!reginfolist_contents(&src->rout, DECODE_C(cmp), &contents, &kindx) || contents!=REG_CONSTANT) return false;
+
+    value bound = optimize_getconstant(opt, kindx);
+    if (!MORPHO_ISINTEGER(bound) || MORPHO_GETINTEGERVALUE(bound)!=range->nsteps) return false;
+    if (!MORPHO_ISEQUAL(optimize_type(opt, receiver), typerange)) return false;
+    if (!optimize_hasexacttype(opt, arg) || !MORPHO_ISEQUAL(optimize_type(opt, arg), typeint)) return false;
+
+    *out = arg;
+    return true;
+}
+
+bool strategy_range_reduction(optimizer *opt) {
+    instruction instr = optimize_getinstruction(opt);
+    registerindx rA = DECODE_A(instr), receiver = rA+1, indexreg;
+    indx fnindx, recvindx, startindx;
+
+    CHECK(DECODE_B(instr)==1 && DECODE_C(instr)==0);
+    CHECK(optimize_isconstant(opt, rA, &fnindx));
+    CHECK(optimize_isconstant(opt, receiver, &recvindx));
+
+    value fn = optimize_getconstant(opt, fnindx);
+    value recv = optimize_getconstant(opt, recvindx);
+    CHECK(MORPHO_ISRANGE(recv));
+    CHECK(_israngeenumerate(fn, typerange));
+
+    objectrange *range = MORPHO_GETRANGE(recv);
+    CHECK(_isunitrangestep(range));
+    CHECK(_rangeenumerateindex(opt, instr, range, &indexreg));
+    CHECK(optimize_addconstant(opt, range->start, &startindx));
+
+    instruction insert[] = {
+        ENCODE_LONG(OP_LCT, receiver, (instruction) startindx),
+        ENCODE(OP_ADD, receiver, indexreg, receiver)
+    };
+    optimize_insertinstructions(opt, 2, insert);
+    return true;
+}
+
+/* -------------------------------------
  * Constant global
  * ------------------------------------- */
 
@@ -714,6 +792,7 @@ optimizationstrategy strategies[] = {
     { OP_CALL, strategy_constant_immutable,               0 },
     { OP_METHOD, strategy_constant_method,                0 },
     { OP_INVOKE, strategy_method_resolution,              0 },
+    { OP_METHOD, strategy_range_reduction,                0 },
     { OP_POW,  strategy_power_reduction,                  0 },
     { OP_CALL, strategy_self_dispatch,                    0 },
     { OP_METHOD, strategy_self_dispatch,                  0 },
