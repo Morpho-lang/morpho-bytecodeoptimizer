@@ -15,6 +15,8 @@
 #include "strategy.h"
 #include "layout.h"
 
+DEFINE_VARRAY(functioninputinfo, functioninputinfo)
+
 /* **********************************************************************
  * Optimizer data structure
  * ********************************************************************** */
@@ -31,17 +33,28 @@ void optimizer_init(optimizer *opt, program *prog) {
     reginfolist_init(&opt->rlist, MORPHO_MAXREGISTERS);
     globalinfolist_init(&opt->glist, prog->globals.count);
     classinfolist_init(&opt->classinfo);
-    methodinfolist_init(&opt->methodinfo);
+    functioninfolist_init(&opt->functioninfo);
+    varray_functioninputinfoinit(&opt->functioninputs);
+    dictionary_init(&opt->functioninputindx);
     varray_instructioninit(&opt->insertions);
     
     opt->v=morpho_newvm();
     opt->temp=morpho_newprogram();
+    opt->ipachanged=false;
     
 #ifdef OPTIMIZER_VERBOSE
     opt->verbose=true;
 #else
     opt->verbose=false;
 #endif
+}
+
+static void optimize_clearfunctioninputs(optimizer *opt) {
+    for (int i=0; i<opt->functioninputs.count; i++) reginfolist_clear(&opt->functioninputs.data[i].input);
+    opt->functioninputs.count=0;
+    dictionary_clear(&opt->functioninputindx);
+    dictionary_init(&opt->functioninputindx);
+    opt->ipachanged=false;
 }
 
 /** Clears an optimizer data structure */
@@ -52,7 +65,10 @@ void optimize_clear(optimizer *opt) {
     reginfolist_clear(&opt->rlist);
     globalinfolist_clear(&opt->glist);
     classinfolist_clear(&opt->classinfo);
-    methodinfolist_clear(&opt->methodinfo);
+    functioninfolist_clear(&opt->functioninfo);
+    optimize_clearfunctioninputs(opt);
+    varray_functioninputinfoclear(&opt->functioninputs);
+    dictionary_clear(&opt->functioninputindx);
     varray_instructionclear(&opt->insertions);
     
     if (opt->v) morpho_freevm(opt->v);
@@ -63,13 +79,13 @@ void optimize_clear(optimizer *opt) {
  * Methodinfo
  * ********************************************************************** */
 
-// Adds a method into the methodinfo list
-void _processfunction(objectfunction *fn, methodinfolist *out) {
-    methodinfolist_incrementowners(out, fn);
+// Adds a function into the functioninfo list
+void _processfunction(objectfunction *fn, functioninfolist *out) {
+    functioninfolist_incrementowners(out, fn);
 }
 
 // Searches a metafunction for methods
-void _processmetafunction(objectmetafunction *mfn, methodinfolist *out) {
+void _processmetafunction(objectmetafunction *mfn, functioninfolist *out) {
     for (int i=0; i<mfn->fns.count; i++) {
         value fn = mfn->fns.data[i];
         if (MORPHO_ISFUNCTION(fn)) {
@@ -79,7 +95,7 @@ void _processmetafunction(objectmetafunction *mfn, methodinfolist *out) {
 }
 
 // Searches a class's method table
-void _processclass(objectclass *klass, methodinfolist *out) {
+void _processclass(objectclass *klass, functioninfolist *out) {
     for (int i=0; i<klass->methods.capacity; i++) {
         value label = klass->methods.contents[i].key;
         if (MORPHO_ISNIL(label)) continue;
@@ -98,13 +114,13 @@ void optimize_methodinfo(optimizer *opt) {
     varray_value *klasses = &opt->prog->classes;
     
     for (int i=0; i<klasses->count; i++) {
-        _processclass(MORPHO_GETCLASS(klasses->data[i]), &opt->methodinfo);
+        _processclass(MORPHO_GETCLASS(klasses->data[i]), &opt->functioninfo);
     }
 }
 
 /* Retrieve the count of method owners */
 int optimize_methodcountowners(optimizer *opt, objectfunction *method) {
-    return methodinfolist_countowners(&opt->methodinfo, method);
+    return functioninfolist_countowners(&opt->functioninfo, method);
 }
 
 /* Retrieve the count of constructor calls for a class. */
@@ -179,6 +195,176 @@ bool optimize_typefromvalue(value val, value *type) {
     return value_type(val, type);
 }
 
+static void _optimize_initregfact(reginfo *info) {
+    info->contents=REG_NOFACT;
+    info->indx=0;
+    info->usage=REGUSE_NONE;
+    info->iindx=INSTRUCTIONINDX_EMPTY;
+    info->type=MORPHO_NIL;
+    info->typeinfo=REGTYPE_UNKNOWN;
+    info->hasalias=false;
+    info->alias=0;
+}
+
+static bool _optimize_addconstanttofunction(optimizer *opt, objectfunction *func, value val, indx *out) {
+    unsigned int k;
+
+    if (varray_valuefindsame(&func->konst, val, &k)) {
+        *out = (indx) k;
+        return true;
+    }
+
+    if (!varray_valueadd(&func->konst, &val, 1)) return false;
+    *out=func->konst.count-1;
+
+    if (MORPHO_ISOBJECT(val)) program_bindobject(opt->prog, MORPHO_GETOBJECT(val));
+    return true;
+}
+
+static functioninputinfo *_optimize_functioninputinfo(optimizer *opt, objectfunction *func) {
+    value ix;
+    if (dictionary_get(&opt->functioninputindx, MORPHO_OBJECT(func), &ix) && MORPHO_ISINTEGER(ix)) {
+        return &opt->functioninputs.data[MORPHO_GETINTEGERVALUE(ix)];
+    }
+
+    functioninputinfo info;
+    info.func=func;
+    reginfolist_init(&info.input, func->nregs);
+    if (!varray_functioninputinfoadd(&opt->functioninputs, &info, 1)) {
+        reginfolist_clear(&info.input);
+        return NULL;
+    }
+
+    dictionary_insert(&opt->functioninputindx, MORPHO_OBJECT(func), MORPHO_INTEGER(opt->functioninputs.count-1));
+    return &opt->functioninputs.data[opt->functioninputs.count-1];
+}
+
+static bool _optimize_functionhasflags(optimizer *opt, objectfunction *func, unsigned int flags) {
+    return functioninfolist_hasflags(&opt->functioninfo, func, flags);
+}
+
+static bool _optimize_functionisrecursive(optimizer *opt, objectfunction *func) {
+    return _optimize_functionhasflags(opt, func, FUNCTIONINFO_RECURSIVE);
+}
+
+static bool _optimize_functionescapes(optimizer *opt, objectfunction *func) {
+    return _optimize_functionhasflags(opt, func, FUNCTIONINFO_ESCAPES);
+}
+
+void optimize_markrecursive(optimizer *opt, objectfunction *func) {
+    if (_optimize_functionisrecursive(opt, func)) return;
+    if (!functioninfolist_setflags(&opt->functioninfo, func, FUNCTIONINFO_RECURSIVE)) return;
+    opt->ipachanged=true;
+}
+
+void optimize_markescaped(optimizer *opt, objectfunction *func) {
+    functioninputinfo *info;
+
+    if (_optimize_functionescapes(opt, func)) return;
+    if (!functioninfolist_setflags(&opt->functioninfo, func, FUNCTIONINFO_ESCAPES)) return;
+
+    info = _optimize_functioninputinfo(opt, func);
+    if (info) reginfolist_wipe(&info->input, info->input.nreg);
+
+    opt->ipachanged=true;
+}
+
+static bool _optimize_setfunctioninputfact(optimizer *opt, functioninputinfo *info, registerindx dest, reginfo *incoming) {
+    if (dest>=info->input.nreg) return false;
+
+    reginfo old = info->input.rinfo[dest];
+    if (old.contents==REG_NOFACT) {
+        info->input.rinfo[dest]=*incoming;
+    } else {
+        reginfo_join(&info->input.rinfo[dest], incoming);
+    }
+
+    if (!reginfo_equal(&old, &info->input.rinfo[dest])) {
+        opt->ipachanged=true;
+        return true;
+    }
+    return false;
+}
+
+static bool _optimize_recordcallarg(optimizer *opt, functioninputinfo *info, registerindx dest, registerindx src) {
+    reginfo incoming;
+    value type;
+    regtypeinfo typeinfo;
+    indx kindx, calleeindx;
+
+    _optimize_initregfact(&incoming);
+    incoming.contents=REG_VALUE;
+    incoming.iindx=INSTRUCTIONINDX_EMPTY;
+    incoming.usage=REGUSE_WRITTEN;
+
+    if (optimize_isconstant(opt, src, &kindx)) {
+        value konst = optimize_getconstant(opt, kindx);
+        if (_optimize_addconstanttofunction(opt, info->func, konst, &calleeindx)) {
+            incoming.contents=REG_CONSTANT;
+            incoming.indx=calleeindx;
+            if (optimize_typefromvalue(konst, &type)) {
+                incoming.type=type;
+                incoming.typeinfo=REGTYPE_EXACT;
+            }
+        }
+    } else {
+        type=optimize_type(opt, src);
+        typeinfo=optimize_typeinfo(opt, src);
+        if (!MORPHO_ISNIL(type)) {
+            incoming.contents=REG_TYPEDVALUE;
+            incoming.type=type;
+            incoming.typeinfo=typeinfo;
+        }
+    }
+
+    return _optimize_setfunctioninputfact(opt, info, dest, &incoming);
+}
+
+static bool _optimize_classisderivedfrom(objectclass *klass, objectclass *base) {
+    if (!klass || !base) return false;
+    if (klass==base) return true;
+
+    for (unsigned int i=0; i<base->children.count; i++) {
+        value child = base->children.data[i];
+        if (MORPHO_ISCLASS(child) &&
+            _optimize_classisderivedfrom(klass, MORPHO_GETCLASS(child))) return true;
+    }
+
+    return false;
+}
+
+static bool _optimize_canspecializeself(optimizer *opt, objectfunction *func, registerindx selfreg) {
+    if (selfreg==REGISTER_UNALLOCATED || !func || !func->klass) return false;
+    if (!optimize_hasuniquetype(opt, selfreg)) return false;
+
+    value selftype = optimize_type(opt, selfreg);
+    if (!MORPHO_ISCLASS(selftype)) return false;
+
+    return _optimize_classisderivedfrom(MORPHO_GETCLASS(selftype), func->klass);
+}
+
+bool optimize_recordcallsite(optimizer *opt, objectfunction *func, registerindx argstart, int nargs, registerindx selfreg) {
+    functioninputinfo *info = _optimize_functioninputinfo(opt, func);
+    bool changed=false;
+
+    if (!info || _optimize_functionescapes(opt, func)) return false;
+
+    if (_optimize_canspecializeself(opt, func, selfreg)) changed = _optimize_recordcallarg(opt, info, 0, selfreg) || changed;
+    for (registerindx i=0; i<nargs && i<func->nargs; i++) {
+        changed = _optimize_recordcallarg(opt, info, i+1, argstart+i) || changed;
+    }
+
+    return changed;
+}
+
+static void _optimize_applyinputfact(optimizer *opt, objectfunction *func, registerindx rindx, reginfo *incoming) {
+    if (func->klass && rindx==0) {
+        reginfo_join(&opt->rlist.rinfo[rindx], incoming);
+    } else {
+        opt->rlist.rinfo[rindx]=*incoming;
+    }
+}
+
 /** Callback function to get a constant from the current constant table */
 value optimize_getconstant(optimizer *opt, indx i) {
     return block_getconstant(opt->currentblk, i);
@@ -186,25 +372,7 @@ value optimize_getconstant(optimizer *opt, indx i) {
 
 /** Adds a constant to the current constant table */
 bool optimize_addconstant(optimizer *opt, value val, indx *out) {
-    objectfunction *func = opt->currentblk->func;
-    
-    // Does the constant already exist?
-    unsigned int k;
-    if (varray_valuefindsame(&func->konst, val, &k)) {
-        *out = (indx) k;
-        return true;
-    }
-    
-    // If not add it
-    if (!varray_valueadd(&func->konst, &val, 1)) return false;
-        
-    *out=func->konst.count-1;
-    
-    if (MORPHO_ISOBJECT(val)) { // Bind the object to the program
-        program_bindobject(opt->prog, MORPHO_GETOBJECT(val));
-    }
-    
-    return true;
+    return _optimize_addconstanttofunction(opt, opt->currentblk->func, val, out);
 }
 
 /** Checks if a register has no semantic fact */
@@ -454,6 +622,11 @@ static void _optimize_classinfo_scanfunction(optimizer *opt, objectfunction *fun
             case OP_MOV: regs[a] = regs[DECODE_B(instr)]; break;
             case OP_SGL: globals[DECODE_Bx(instr)] = regs[DECODE_A(instr)]; break;
             case OP_LGL: regs[a] = globals[DECODE_Bx(instr)]; break;
+            case OP_B: {
+                int offset = DECODE_sBx(instr);
+                if (offset>0) i += offset;
+                break;
+            }
             case OP_INVOKE:
             case OP_METHOD:
             case OP_CALL: {
@@ -536,11 +709,12 @@ static bool _optimize_isdeadclassmethod(optimizer *opt, block *blk) {
 }
 
 static void optimize_prunedeadclassblocks(optimizer *opt) {
-    for (blockindx i=0; i<opt->graph.count; i++) {
-        block *blk = &opt->graph.data[i];
-
-        if (block_isentry(blk) && _optimize_isdeadclassmethod(opt, blk)) blk->isentry=false;
-    }
+    /* Dead class pruning is currently unsound. The reduced MiniSphere repro
+       shows methods being pruned even though the class is still constructed
+       through surviving call sites, which turns valid constructor calls into
+       runtime failures. Disable this optimization until class liveness can be
+       computed correctly across all call forms. */
+    return;
 }
 
 void _optusagefn(registerindx r, void *ref) {
@@ -744,6 +918,11 @@ bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx
     return _isdeadstoresafearithmetictype(optimize_type(opt, r));
 }
 
+static bool _ispreservedentryregister(objectfunction *func, registerindx r) {
+    if (func->klass) return (r<=func->nargs);
+    return (r>0 && r<=func->nargs);
+}
+
 /** Optimizations performed at the end of a code block */
 void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     if (opt->verbose) printf("Ending block\n");
@@ -753,7 +932,7 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
         
         if (!optimize_isempty(opt, i) &&                // Does the register contain something?
             reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
-            reginfolist_regcontents(&opt->rlist, i)!=REG_PARAMETER && // It's not a parameter
+            !_ispreservedentryregister(blk->func, i) && // It's not a preserved entry slot
             !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
             reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
             block_contains(blk, src)) { // Ensure instruction is in this block
@@ -846,17 +1025,21 @@ bool optimize_processinsertions(optimizer *opt, block *blk) {
 /** Sets the contents of registers from knowledge of the function signature */
 void optimize_signature(optimizer *opt) {
     objectfunction *func = optimize_currentblock(opt)->func;
-    
-    // Set object type if the method isn't used by multiple classes 
-    if (func->klass &&
-        optimize_methodcountowners(opt, func)==1) {
-        reginfolist_write(&opt->rlist, func->entry, 0, REG_PARAMETER, 0);
-        reginfolist_settypeinfo(&opt->rlist, 0, MORPHO_OBJECT(func->klass), REGTYPE_SUBTYPE);
+
+    reginfolist_write(&opt->rlist, func->entry, 0, REG_VALUE, 0);
+    opt->rlist.rinfo[0].iindx=INSTRUCTIONINDX_EMPTY;
+
+    if (func->klass) {
+        reginfolist_settypeinfo(&opt->rlist, 0, MORPHO_OBJECT(func->klass),
+                                (func->klass->children.count==0) ? REGTYPE_EXACT : REGTYPE_SUBTYPE);
+    } else {
+        reginfolist_settypeinfo(&opt->rlist, 0, typecallable, REGTYPE_SUBTYPE);
     }
     
     value type;
     for (registerindx i=0; i<func->nargs; i++) {
-        reginfolist_write(&opt->rlist, func->entry, i+1, REG_PARAMETER, 0);
+        reginfolist_write(&opt->rlist, func->entry, i+1, REG_VALUE, 0);
+        opt->rlist.rinfo[i+1].iindx=INSTRUCTIONINDX_EMPTY;
         if (signature_getparamtype(&func->sig, i, &type)) {
             reginfolist_settypeinfo(&opt->rlist, i+1, type, REGTYPE_SUBTYPE);
         }
@@ -939,6 +1122,15 @@ typedef struct {
     prepassinstructionvisittable *visitinstructiontable;
     prepassfinalizefn finalize;
 } prepass;
+
+/* -------------------------------------
+ * Interprocedural inputs
+ * ------------------------------------- */
+
+/** Clears derived call-site input facts before each analysis pass. */
+void optimize_functioninputs_init(optimizer *opt) {
+    optimize_clearfunctioninputs(opt);
+}
 
 /* -------------------------------------
  * Global usage
@@ -1100,6 +1292,7 @@ void optimize_loopcandidates_finalize(optimizer *opt) {
  * ------------------------------------- */
 
 prepass prepasses[] = {
+    { optimize_functioninputs_init, NULL, NULL, NULL },
     { optimize_globalusage_init, NULL, globalusagevisitors, NULL },
     { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, optimize_loopcandidates_finalize },
     { NULL, NULL, NULL, NULL }
@@ -1142,11 +1335,6 @@ void optimize_runprepasses(optimizer *opt) {
  * Dataflow analysis
  * ********************************************************************** */
 
-static bool _isparam(int n, block **src, int i) {
-    for (int k=0; k<n; k++) if (src[k]->rout.rinfo[i].contents==REG_PARAMETER) return true;
-    return false;
-}
-
 static void _prepareboundaryfact(reginfo *info) {
     info->usage=REGUSE_NONE;
     info->hasalias=false;
@@ -1175,7 +1363,7 @@ static reginfo _resolvejoinfact(int n, block **src, int rindx) {
 
 static void _resolve(int n, block **src, reginfolist *dest) {
     for (int i=0; i<dest->nreg; i++) {
-        if (_isparam(n, src, i)) continue;
+        if (_ispreservedentryregister(src[0]->func, i)) continue;
         dest->rinfo[i]=_resolvejoinfact(n, src, i);
     }
 }
@@ -1211,7 +1399,7 @@ static void _resolveloopheader(optimizer *opt, block *blk, int nsrc, block **src
         reginfo baseline, joined;
         bool preserve=true;
 
-        if (_isparam(nentry, entrypred, i) || _isparam(nback, backpred, i)) continue;
+        if (_ispreservedentryregister(blk->func, i)) continue;
 
         baseline=dest->rinfo[i];
         _prepareboundaryfact(&baseline);
@@ -1244,10 +1432,34 @@ static void _resolveloopheader(optimizer *opt, block *blk, int nsrc, block **src
     }
 }
 
+static void optimize_applyfunctioninput(optimizer *opt, block *blk) {
+    value ix;
+    bool recursive;
+    functioninputinfo *info;
+
+    if (!dictionary_get(&opt->functioninputindx, MORPHO_OBJECT(blk->func), &ix) || !MORPHO_ISINTEGER(ix)) return;
+
+    info = &opt->functioninputs.data[MORPHO_GETINTEGERVALUE(ix)];
+    recursive = _optimize_functionisrecursive(opt, blk->func);
+
+    for (registerindx i=0; i<info->input.nreg && i<opt->rlist.nreg; i++) {
+        if (info->input.rinfo[i].contents!=REG_NOFACT) {
+            reginfo incoming = info->input.rinfo[i];
+
+            if (i>0 && recursive) {
+                reginfo_weaken(&incoming);
+            }
+
+            _optimize_applyinputfact(opt, blk->func, i, &incoming);
+        }
+    }
+}
+
 static void optimize_joinblockinput(optimizer *opt, block *blk) {
     reginfolist_wipe(&opt->rlist, blk->func->nregs);
     
     optimize_signature(opt); // Restore function parameters
+    optimize_applyfunctioninput(opt, blk);
     
     int nentry = blk->src.count;
     if (!block_isentry(blk) &&
@@ -1304,6 +1516,14 @@ static void optimize_transferblock(optimizer *opt, block *blk) {
     }
 
     reginfolist_copy(&opt->rlist, &blk->rout);
+}
+
+static void optimize_queueentryblocks(optimizer *opt, varray_instructionindx *worklist) {
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        if (block_isentry(&opt->graph.data[i]) && optimize_blockisreachable(opt, &opt->graph.data[i])) {
+            varray_instructionindxwrite(worklist, i);
+        }
+    }
 }
 
 /** Enqueues reachable successor blocks when a block's output facts change. */
@@ -1373,7 +1593,9 @@ static void optimize_dataflow(optimizer *opt) {
         reginfolist_copy(&blk->rin, &oldrin);
         reginfolist_copy(&blk->rout, &oldrout);
 
+        opt->ipachanged=false;
         optimize_transferblock(opt, blk);
+        if (opt->ipachanged) optimize_queueentryblocks(opt, &worklist);
         rinchanged = !reginfolist_equal(&oldrin, &blk->rin);
         routchanged = !reginfolist_equal(&oldrout, &blk->rout);
 
@@ -1460,7 +1682,7 @@ bool optimize(program *in) {
  * Initialization/Finalization
  * ********************************************************************** */
 
-value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass;
+value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass, typecallable;
 
 void bytecodeoptimizer_initialize(void) {
     morpho_setoptimizer(optimize);
@@ -1492,6 +1714,10 @@ void bytecodeoptimizer_initialize(void) {
     
     objectstring classlabel = MORPHO_STATICSTRING(CLASS_CLASSNAME);
     typeclass = builtin_findclass(MORPHO_OBJECT(&classlabel));
+
+    objectstring callablelabel = MORPHO_STATICSTRING(CALLABLE_CLASSNAME);
+    typecallable = builtin_findclass(MORPHO_OBJECT(&callablelabel));
+
 }
 
 void bytecodeoptimizer_finalize(void) {

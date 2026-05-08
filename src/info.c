@@ -6,7 +6,7 @@
 
 #include "info.h"
 
-DEFINE_VARRAY(methodinfoentry, methodinfoentry)
+DEFINE_VARRAY(functioninfoentry, functioninfoentry)
 /* **********************************************************************
  * Globals
  * ********************************************************************** */
@@ -189,80 +189,80 @@ int classinfolist_countconstructed(classinfolist *clist, objectclass *klass) {
  * Methods/functions
  * ********************************************************************** */
 
-/** Initializes method metadata. */
-static void methodinfo_init(mthdinfo *info) {
+/** Initializes function metadata. */
+static void functioninfo_init(functioninfo *info) {
     info->nowners=0;
-    info->flags=METHODINFO_NONE;
+    info->flags=FUNCTIONINFO_NONE;
 }
 
 /** Finds the array index for a function's metadata. */
-static int methodinfolist_find(methodinfolist *mlist, objectfunction *method) {
+static int functioninfolist_find(functioninfolist *flist, objectfunction *function) {
     value indx;
-    if (dictionary_get(&mlist->indx, MORPHO_OBJECT(method), &indx) &&
+    if (dictionary_get(&flist->indx, MORPHO_OBJECT(function), &indx) &&
         MORPHO_ISINTEGER(indx)) return MORPHO_GETINTEGERVALUE(indx);
 
     return -1;
 }
 
 /** Retrieves metadata for a function if it exists. */
-static mthdinfo *methodinfolist_get(methodinfolist *mlist, objectfunction *method) {
-    int indx = methodinfolist_find(mlist, method);
+static functioninfo *functioninfolist_get(functioninfolist *flist, objectfunction *function) {
+    int indx = functioninfolist_find(flist, function);
 
     if (indx<0) return NULL;
 
-    return &mlist->list.data[indx].info;
+    return &flist->list.data[indx].info;
 }
 
 /** Adds a new metadata record for a function. */
-static mthdinfo *methodinfolist_add(methodinfolist *mlist, objectfunction *method) {
-    methodinfoentry entry = { .method=method};
-    methodinfo_init(&entry.info);
+static functioninfo *functioninfolist_add(functioninfolist *flist, objectfunction *function) {
+    functioninfoentry entry = { .function=function};
+    functioninfo_init(&entry.info);
 
-    if (!varray_methodinfoentryadd(&mlist->list, &entry, 1)) return NULL;
+    if (!varray_functioninfoentryadd(&flist->list, &entry, 1)) return NULL;
 
-    dictionary_insert(&mlist->indx,MORPHO_OBJECT(method), MORPHO_INTEGER(mlist->list.count-1));
+    dictionary_insert(&flist->indx,MORPHO_OBJECT(function), MORPHO_INTEGER(flist->list.count-1));
 
-    return &mlist->list.data[mlist->list.count-1].info;
+    return &flist->list.data[flist->list.count-1].info;
 }
 
 /** Retrieves metadata for a function, creating it on demand. */
-static mthdinfo *methodinfolist_getoradd(methodinfolist *mlist, objectfunction *method) {
-    mthdinfo *info = methodinfolist_get(mlist, method);
-    if (!info) info = methodinfolist_add(mlist, method);
+static functioninfo *functioninfolist_getoradd(functioninfolist *flist, objectfunction *function) {
+    functioninfo *info = functioninfolist_get(flist, function);
+    if (!info) info = functioninfolist_add(flist, function);
     return info;
 }
 
-/** Initializes a method metadata list. */
-bool methodinfolist_init(methodinfolist *mlist) {
-    varray_methodinfoentryinit(&mlist->list);
-    dictionary_init(&mlist->indx);
+/** Initializes a function metadata list. */
+bool functioninfolist_init(functioninfolist *flist) {
+    varray_functioninfoentryinit(&flist->list);
+    dictionary_init(&flist->indx);
     return true;
 }
 
-/** Clears a method metadata list. */
-void methodinfolist_clear(methodinfolist *mlist) {
-    varray_methodinfoentryclear(&mlist->list);
-    dictionary_clear(&mlist->indx);
+/** Clears a function metadata list. */
+void functioninfolist_clear(functioninfolist *flist) {
+    varray_functioninfoentryclear(&flist->list);
+    dictionary_clear(&flist->indx);
 }
 
-/** Increments the method-owner count for a function. */
-bool methodinfolist_incrementowners(methodinfolist *mlist, objectfunction *method) {
-    mthdinfo *info = methodinfolist_getoradd(mlist, method);
+/** Increments the owner count for a function. */
+bool functioninfolist_incrementowners(functioninfolist *flist, objectfunction *function) {
+    functioninfo *info = functioninfolist_getoradd(flist, function);
     if (!info) return false;
 
     info->nowners++;
     return true;
 }
 
-/** Returns the number of owning method entries for a function. */
-int methodinfolist_countowners(methodinfolist *mlist, objectfunction *method) {
-    mthdinfo *info = methodinfolist_get(mlist, method);
+/** Returns the number of owning entries for a function. */
+int functioninfolist_countowners(functioninfolist *flist, objectfunction *function) {
+    functioninfo *info = functioninfolist_get(flist, function);
     return info ? info->nowners : 0;
 }
 
 /** Sets metadata flags on a function record. */
-bool methodinfolist_setflags(methodinfolist *mlist, objectfunction *method, unsigned int flags) {
-    mthdinfo *info = methodinfolist_getoradd(mlist, method);
+bool functioninfolist_setflags(functioninfolist *flist, objectfunction *function, unsigned int flags) {
+    functioninfo *info = functioninfolist_getoradd(flist, function);
     if (!info) return false;
 
     info->flags |= flags;
@@ -270,8 +270,8 @@ bool methodinfolist_setflags(methodinfolist *mlist, objectfunction *method, unsi
 }
 
 /** Checks whether a function record has all requested flags set. */
-bool methodinfolist_hasflags(methodinfolist *mlist, objectfunction *method, unsigned int flags) {
-    mthdinfo *info = methodinfolist_get(mlist, method);
+bool functioninfolist_hasflags(functioninfolist *flist, objectfunction *function, unsigned int flags) {
+    functioninfo *info = functioninfolist_get(flist, function);
 
     return (info && ((info->flags & flags)==flags));
 }

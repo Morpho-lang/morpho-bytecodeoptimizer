@@ -274,6 +274,12 @@ bool strategy_register_replacement(optimizer *opt) {
     instruction op = DECODE_OP(instr);
     opcodeflags flags = opcode_getflags(op);
     CHECK(flags & OPCODE_PROPAGATE);
+
+    /* Property and indexing operations interact with mutable object state.
+       Rewriting their operand registers through alias chains is not
+       semantics-preserving in general, and it matches the reduced failing
+       Delaunay/Circumsphere repro. */
+    if (op==OP_LPR || op==OP_SPR || op==OP_LIX || op==OP_LIXL || op==OP_SIX) return false;
     
     registerindx a=DECODE_A(instr), b=DECODE_B(instr), c=DECODE_C(instr);
     registerindx na=a, nb=b, nc=c;
@@ -546,7 +552,11 @@ static bool _rangeenumerateindex(optimizer *opt, instruction instr, objectrange 
     if (DECODE_OP(branch)!=OP_BIF && DECODE_OP(branch)!=OP_BIFF) return false;
     if (DECODE_A(branch)!=DECODE_A(cmp)) return false;
 
-    if (!optimize_isregister(opt, arg, &origarg) || origarg!=DECODE_B(cmp)) return false;
+    /* Earlier rewrites can collapse intermediate MOV chains before this reducer runs.
+       Follow aliases back to the original induction register instead of requiring a
+       direct alias on the enumerate argument copy. */
+    origarg = optimize_findoriginalregister(opt, arg);
+    if (origarg!=DECODE_B(cmp)) return false;
 
     regcontents contents;
     indx kindx;
@@ -555,7 +565,6 @@ static bool _rangeenumerateindex(optimizer *opt, instruction instr, objectrange 
     value bound = optimize_getconstant(opt, kindx);
     if (!MORPHO_ISINTEGER(bound) || MORPHO_GETINTEGERVALUE(bound)!=range->nsteps) return false;
     if (!MORPHO_ISEQUAL(optimize_type(opt, receiver), typerange)) return false;
-    if (!optimize_hasexacttype(opt, arg) || !MORPHO_ISEQUAL(optimize_type(opt, arg), typeint)) return false;
 
     *out = arg;
     return true;
@@ -695,7 +704,7 @@ bool strategy_self_dispatch(optimizer *opt) {
 
     if (target==0) {
         block *blk = optimize_currentblock(opt);
-        methodinfolist_setflags(&opt->methodinfo, blk->func, METHODINFO_USESELF_DISPATCH);
+        functioninfolist_setflags(&opt->functioninfo, blk->func, FUNCTIONINFO_USESELF_DISPATCH);
     }
 
     return false;
@@ -709,7 +718,7 @@ static bool _hasselfdispatch(optimizer *opt, objectmetafunction *mfn) {
     for (int i=0; i<mfn->fns.count; i++) {
         value fn = mfn->fns.data[i];
         if (MORPHO_ISFUNCTION(fn) &&
-            methodinfolist_hasflags(&opt->methodinfo, MORPHO_GETFUNCTION(fn), METHODINFO_USESELF_DISPATCH)) return true;
+            functioninfolist_hasflags(&opt->functioninfo, MORPHO_GETFUNCTION(fn), FUNCTIONINFO_USESELF_DISPATCH)) return true;
     }
 
     return false;

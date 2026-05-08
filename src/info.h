@@ -75,34 +75,36 @@ int classinfolist_countconstructed(classinfolist *clist, objectclass *klass);
  * ********************************************************************** */
 
 typedef enum {
-    METHODINFO_NONE               = 0x0,
-    METHODINFO_USESELF_DISPATCH   = 0x1
-} methodinfoflags;
+    FUNCTIONINFO_NONE              = 0x0,
+    FUNCTIONINFO_USESELF_DISPATCH  = 0x1,
+    FUNCTIONINFO_RECURSIVE         = 0x2,
+    FUNCTIONINFO_ESCAPES           = 0x4
+} functioninfoflags;
 
 typedef struct {
     int nowners;
     unsigned int flags;
-} mthdinfo;
+} functioninfo;
 
 typedef struct {
-    objectfunction *method;
-    mthdinfo info;
-} methodinfoentry;
+    objectfunction *function;
+    functioninfo info;
+} functioninfoentry;
 
-DECLARE_VARRAY(methodinfoentry, methodinfoentry)
+DECLARE_VARRAY(functioninfoentry, functioninfoentry)
 
 typedef struct {
-    varray_methodinfoentry list;
+    varray_functioninfoentry list;
     dictionary indx;
-} methodinfolist;
+} functioninfolist;
 
-bool methodinfolist_init(methodinfolist *mlist);
-void methodinfolist_clear(methodinfolist *mlist);
+bool functioninfolist_init(functioninfolist *flist);
+void functioninfolist_clear(functioninfolist *flist);
 
-bool methodinfolist_incrementowners(methodinfolist *mlist, objectfunction *method);
-int methodinfolist_countowners(methodinfolist *mlist, objectfunction *method);
+bool functioninfolist_incrementowners(functioninfolist *flist, objectfunction *function);
+int functioninfolist_countowners(functioninfolist *flist, objectfunction *function);
 
-bool methodinfolist_setflags(methodinfolist *mlist, objectfunction *method, unsigned int flags);
-bool methodinfolist_hasflags(methodinfolist *mlist, objectfunction *method, unsigned int flags);
+bool functioninfolist_setflags(functioninfolist *flist, objectfunction *function, unsigned int flags);
+bool functioninfolist_hasflags(functioninfolist *flist, objectfunction *function, unsigned int flags);
 
 #endif

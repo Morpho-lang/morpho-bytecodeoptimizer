@@ -19,6 +19,13 @@
  * ********************************************************************** */
 
 typedef struct {
+    objectfunction *func;
+    reginfolist input;
+} functioninputinfo;
+
+DECLARE_VARRAY(functioninputinfo, functioninputinfo)
+
+typedef struct {
     program *prog;
     
     error err; 
@@ -30,7 +37,9 @@ typedef struct {
     reginfolist rlist; /** Used to track register state */
     globalinfolist glist; /** Used to track globals */
     classinfolist classinfo; /** Store class construction metadata */
-    methodinfolist methodinfo; /** Store function/method metadata */
+    functioninfolist functioninfo; /** Store per-function metadata */
+    varray_functioninputinfo functioninputs; /** Inferred call-site inputs for functions */
+    dictionary functioninputindx; /** Map functions to functioninputs indices */
     
     int pass; /** Count passes */
     
@@ -45,6 +54,7 @@ typedef struct {
     program *temp; /** Temporary program structure */
     
     bool verbose; /** Provide debugging output */
+    bool ipachanged; /** Whether interprocedural facts changed during dataflow */
 } optimizer;
 
 /** Function that can be called by the optimizer to set the contents of the register info file */
@@ -56,7 +66,7 @@ typedef void (*usagecallbackfn) (registerindx r, void *ref);
 /** Function that can be called by the optimizer to track register usage */
 typedef void (*opcodeusagefn) (instruction instr, block *blk, usagecallbackfn usefn, void *ref);
 
-extern value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass;
+extern value typeint, typelist, typefloat, typestring, typebool, typeclosure, typerange, typetuple, typeclass, typecallable;
 
 /* **********************************************************************
  * Interface for optimization strategies
@@ -73,6 +83,8 @@ void optimize_settypeinfo(optimizer *opt, registerindx i, value type, regtypeinf
 value optimize_type(optimizer *opt, registerindx r);
 regtypeinfo optimize_typeinfo(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);
+bool optimize_recordcallsite(optimizer *opt, objectfunction *func, registerindx argstart, int nargs, registerindx selfreg);
+void optimize_markrecursive(optimizer *opt, objectfunction *func);
 
 value optimize_getconstant(optimizer *opt, indx i);
 bool optimize_addconstant(optimizer *opt, value val, indx *indx);
@@ -84,6 +96,7 @@ bool optimize_isregister(optimizer *opt, registerindx i, registerindx *indx);
 bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, indx *indx);
 bool optimize_hasuniquetype(optimizer *opt, registerindx r);
 bool optimize_hasexacttype(optimizer *opt, registerindx r);
+void optimize_markescaped(optimizer *opt, objectfunction *func);
 
 bool optimize_isoverwritten(optimizer *opt, registerindx i, instructionindx start);
 

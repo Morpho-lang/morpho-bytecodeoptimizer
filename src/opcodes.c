@@ -135,10 +135,26 @@ void cmp_trackingfn(optimizer *opt) {
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
+static void _trackescapedcallables(optimizer *opt, objectfunction *current, registerindx argstart, int nargs) {
+    for (registerindx i=0; i<nargs; i++) {
+        registerindx r = argstart+i;
+        indx kindx;
+
+        if (optimize_isconstant(opt, r, &kindx)) {
+            value val = optimize_getconstant(opt, kindx);
+            if (MORPHO_ISFUNCTION(val)) optimize_markescaped(opt, MORPHO_GETFUNCTION(val));
+        } else if (current && !current->klass && optimize_findoriginalregister(opt, r)==0) {
+            optimize_markescaped(opt, current);
+        }
+    }
+}
+
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    objectfunction *current = optimize_currentblock(opt)->func;
+    registerindx originalcallee;
 
     /* Calls can mutate globals or captured state. Drop cached nonlocal load facts
        so later LGL/LUP instructions are not rewritten to stale register copies. */
@@ -147,13 +163,45 @@ void call_trackingfn(optimizer *opt) {
     
     value type=MORPHO_NIL;
     value content=MORPHO_NIL;
-    indx indx;
-    if (optimize_isconstant(opt, a, &indx)) {
-        content = optimize_getconstant(opt, indx);
-    } else if (optimize_isglobal(opt, a, &indx)) {
-        content = globalinfolist_type(optimize_globalinfolist(opt), (int) indx);
+    indx cindx;
+    if (optimize_isconstant(opt, a, &cindx)) {
+        content = optimize_getconstant(opt, cindx);
+    } else if (optimize_isglobal(opt, a, &cindx)) {
+        content = globalinfolist_type(optimize_globalinfolist(opt), (int) cindx);
+    }
+
+    _trackescapedcallables(opt, current, a+1, nargs);
+    
+    if (current && !current->klass &&
+        ((a==0 && current!=opt->prog->global) ||
+         (optimize_isregister(opt, a, &originalcallee) && originalcallee==0))) {
+        optimize_markrecursive(opt, current);
     }
     
+    if (MORPHO_ISFUNCTION(content)) {
+        if (MORPHO_GETFUNCTION(content)==current) optimize_markrecursive(opt, current);
+        optimize_recordcallsite(opt, MORPHO_GETFUNCTION(content), a+1, nargs, REGISTER_UNALLOCATED);
+    } else if (MORPHO_ISMETAFUNCTION(content)) {
+        objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(content);
+        value types[nargs];
+        value reduced=MORPHO_NIL;
+        error reduceerr = opt->err;
+
+        for (registerindx i=0; i<nargs; i++) {
+            registerindx r = a + i + 1;
+            value argtype = optimize_type(opt, r);
+            if (!optimize_hasexacttype(opt, r)) argtype=MORPHO_NIL;
+            types[i]=argtype;
+        }
+
+        if (metafunction_reduce(mfn, nargs, types, &reduceerr, &reduced)) {
+            if (MORPHO_ISFUNCTION(reduced)) {
+                if (MORPHO_GETFUNCTION(reduced)==current) optimize_markrecursive(opt, current);
+                optimize_recordcallsite(opt, MORPHO_GETFUNCTION(reduced), a+1, nargs, REGISTER_UNALLOCATED);
+            }
+        }
+    }
+
     if (MORPHO_ISCLASS(content)) {
         type=content;
     } else if (MORPHO_ISFUNCTION(content)) {
@@ -176,10 +224,20 @@ void invoke_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    objectfunction *current = optimize_currentblock(opt)->func;
+
+    if (DECODE_OP(instr)==OP_METHOD) {
+        indx kindx;
+        if (optimize_isconstant(opt, a, &kindx)) {
+            value method = optimize_getconstant(opt, kindx);
+            if (MORPHO_ISFUNCTION(method)) optimize_recordcallsite(opt, MORPHO_GETFUNCTION(method), a+2, nargs, a+1);
+        }
+    }
 
     /* Method dispatch has the same nonlocal side-effect risk as a direct call. */
     reginfolist_generalizecontent(&opt->rlist, REG_GLOBAL);
     reginfolist_generalizecontent(&opt->rlist, REG_UPVALUE);
+    _trackescapedcallables(opt, current, a+2, nargs);
     
     for (registerindx i=2; i<=nargs+2*nopt+1; i++) {
         optimize_writevalue(opt, a+i);

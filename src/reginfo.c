@@ -196,6 +196,12 @@ void reginfo_join(reginfo *dest, reginfo *src) {
     *dest=joined;
 }
 
+/** Weakens a register fact to an unknown value while preserving any usable type. */
+void reginfo_weaken(reginfo *info) {
+    reginfo_generalize(info);
+    reginfo_normalize(info);
+}
+
 /** Adds one to the read summary for register i */
 void reginfolist_incread(reginfolist *rlist, int rindx) {
     if (rindx>=rlist->nreg) return;
@@ -346,7 +352,6 @@ void reginfolist_show(reginfolist *rlist) {
         printf("|\tr%u :", i);
         switch (rlist->rinfo[i].contents) {
             case REG_NOFACT: printf(" \n"); continue;
-            case REG_PARAMETER: printf(" p"); break;
             case REG_TYPEDVALUE: printf(" tv"); break;
             case REG_VALUE: printf(" v"); break;
             case REG_CONSTANT: printf(" c%td", rlist->rinfo[i].indx); break;

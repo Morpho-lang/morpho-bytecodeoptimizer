@@ -18,7 +18,6 @@ typedef enum {
     REG_NOFACT,     /** No semantic fact is currently known for this register */
     REG_VALUE,      /** Unknown value */
     REG_TYPEDVALUE, /** Unknown value with known type information */
-    REG_PARAMETER,  /** Contents are a function parameter */
     REG_CONSTANT,   /** Contents came from the constant table */
     REG_GLOBAL,     /** Contents came from a global */
     REG_UPVALUE,    /** Contents came from an upvalue */
@@ -70,6 +69,7 @@ bool reginfolist_copy(reginfolist *src, reginfolist *dest);
 bool reginfo_equal(reginfo *a, reginfo *b);
 bool reginfolist_equal(reginfolist *a, reginfolist *b);
 void reginfo_join(reginfo *dest, reginfo *src);
+void reginfo_weaken(reginfo *info);
 void reginfolist_write(reginfolist *rlist, instructionindx iindx, int rindx, regcontents contents, indx indx);
 void reginfolist_copyregister(reginfolist *rlist, instructionindx iindx, int dest, int src);
 void reginfolist_settype(reginfolist *rlist, int rindx, value type);
