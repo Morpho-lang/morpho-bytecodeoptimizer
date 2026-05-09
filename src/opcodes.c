@@ -72,7 +72,7 @@ void lct_trackingfn(optimizer *opt) {
     value konst, type; // Get the type of the constant
     konst = optimize_getconstant(opt, DECODE_Bx(instr));
     if (optimize_typefromvalue(konst, &type)) {
-        optimize_settype(opt, DECODE_A(instr), type);
+        optimize_setexacttype(opt, DECODE_A(instr), type);
     }
 }
 
@@ -83,7 +83,7 @@ void lgl_trackingfn(optimizer *opt) {
     
     value type = MORPHO_NIL;
     type=globalinfolist_type(optimize_globalinfolist(opt), DECODE_Bx(instr));
-    optimize_settype(opt, rindx, type);
+    optimize_settype(opt, rindx, type, REGTYPE_UNKNOWN);
 }
 
 void sgl_trackingfn(optimizer *opt) {
@@ -126,13 +126,13 @@ void arith_trackingfn(optimizer *opt) {
         ta = typefloat;
     }
     
-    if (!MORPHO_ISNIL(ta)) optimize_settype(opt, a, ta);
+    if (!MORPHO_ISNIL(ta)) optimize_setexacttype(opt, a, ta);
 }
 
 void cmp_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_writevalue(opt, DECODE_A(instr));
-    optimize_settype(opt, DECODE_A(instr), typebool);
+    optimize_setexacttype(opt, DECODE_A(instr), typebool);
 }
 
 static void _trackescapedcallables(optimizer *opt, objectfunction *current, registerindx argstart, int count) {
@@ -217,7 +217,10 @@ void call_trackingfn(optimizer *opt) {
     }
     
     optimize_writevalue(opt, a);
-    if (!MORPHO_ISNIL(type)) optimize_settype(opt, a, type);
+    if (!MORPHO_ISNIL(type)) {
+        regtypeinfo info = (MORPHO_ISCLASS(content) ? REGTYPE_EXACT : REGTYPE_UNKNOWN);
+        optimize_settype(opt, a, type, info);
+    }
 }
 
 void invoke_trackingfn(optimizer *opt) {
@@ -274,13 +277,13 @@ void lixl_trackingfn(optimizer *opt) {
 void closure_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_writevalue(opt, DECODE_A(instr));
-    optimize_settype(opt, DECODE_A(instr), typeclosure);
+    optimize_setexacttype(opt, DECODE_A(instr), typeclosure);
 }
 
 void cat_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     optimize_writevalue(opt, DECODE_A(instr));
-    optimize_settype(opt, DECODE_A(instr), typestring);
+    optimize_setexacttype(opt, DECODE_A(instr), typestring);
 }
 
 /* **********************************************************************

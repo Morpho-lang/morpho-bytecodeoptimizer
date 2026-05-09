@@ -161,14 +161,14 @@ void optimize_writevalue(optimizer *opt, registerindx r) {
     optimize_write(opt, r, REG_VALUE, INSTRUCTIONINDX_EMPTY);
 }
 
-/** Callback function to set the type of a register */
-void optimize_settype(optimizer *opt, registerindx r, value type) {
-    reginfolist_settype(&opt->rlist, r, type);
+/** Callback function to set the type and precision of a register */
+void optimize_settype(optimizer *opt, registerindx r, value type, regtypeinfo info) {
+    reginfolist_settypeinfo(&opt->rlist, r, type, info);
 }
 
-/** Callback function to set the type and precision of a register */
-void optimize_settypeinfo(optimizer *opt, registerindx r, value type, regtypeinfo info) {
-    reginfolist_settypeinfo(&opt->rlist, r, type, info);
+/** Callback function to set an exact type fact for a register. */
+void optimize_setexacttype(optimizer *opt, registerindx r, value type) {
+    optimize_settype(opt, r, type, REGTYPE_EXACT);
 }
 
 /** Callback function to get the type of a register */
@@ -552,7 +552,7 @@ bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value kons
     optimize_write(opt, r, REG_CONSTANT, kindx);
     
     value type; // Also set type information
-    if (optimize_typefromvalue(konst, &type)) optimize_settype(opt, r, type);
+    if (optimize_typefromvalue(konst, &type)) optimize_setexacttype(opt, r, type);
     
     return true;
 }
@@ -1928,15 +1928,11 @@ static void optimize_joinblockinput(optimizer *opt, block *blk) {
         
         for (int i=0, k=0; i<blk->src.capacity; i++) {
             value key = blk->src.contents[i].key;
+            blockindx srcindx;
             if (MORPHO_ISNIL(key)) continue;
             
-            if (!cfgraph_indx(&opt->graph, MORPHO_GETINTEGERVALUE(key), &srcblk[k])) return;
-            
-            if (opt->verbose) {
-                printf("Restoring from block %ti\n", srcblk[k]->start);
-                reginfolist_show(&srcblk[k]->rout);
-            }
-            
+            srcindx = MORPHO_GETINTEGERVALUE(key);
+            if (!cfgraph_indx(&opt->graph, srcindx, &srcblk[k])) return;
             k++;
         }
         
@@ -1946,21 +1942,11 @@ static void optimize_joinblockinput(optimizer *opt, block *blk) {
             _resolve(blk->src.count, srcblk, &opt->rlist);
         }
     }
-    
-    if (opt->verbose) {
-        printf("Restored registers\n");
-        reginfolist_show(&opt->rlist);
-    }
 }
 
 static void optimize_loadblockinput(optimizer *opt, block *blk) {
     reginfolist_wipe(&opt->rlist, blk->func->nregs);
     reginfolist_copy(&blk->rin, &opt->rlist);
-
-    if (opt->verbose) {
-        printf("Loaded block input\n");
-        reginfolist_show(&opt->rlist);
-    }
 }
 
 /** Simulates a block without applying rewrites to compute output facts from input facts. */

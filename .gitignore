@@ -10,3 +10,4 @@ test/disassembly_snapshots/*
 *.png
 *.pov
 /test/benchmarks
+test/Benchmarkresults.md
