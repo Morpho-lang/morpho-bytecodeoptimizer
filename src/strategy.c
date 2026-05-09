@@ -772,7 +772,7 @@ bool strategy_metafunction_reduction(optimizer *opt) {
         
         return true;
     }
-    
+
     return false;
 }
 

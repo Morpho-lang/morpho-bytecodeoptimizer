@@ -149,6 +149,77 @@ static void _trackescapedcallables(optimizer *opt, objectfunction *current, regi
     }
 }
 
+static value _infercallreturntype(value callable) {
+    value type=MORPHO_NIL;
+    signature *sig;
+
+    if (MORPHO_ISCLASS(callable)) {
+        type=callable;
+    } else if (MORPHO_ISMETAFUNCTION(callable)) {
+        metafunction_inferreturntype(MORPHO_GETMETAFUNCTION(callable), &type);
+    } else if ((sig=metafunction_getsignature(callable))) {
+        type=signature_getreturntype(sig);
+    }
+
+    return type;
+}
+
+static void _applyreturntypefact(optimizer *opt, registerindx r, value callable) {
+    value type = _infercallreturntype(callable);
+
+    if (MORPHO_ISNIL(type)) return;
+
+    regtypeinfo info = MORPHO_ISCLASS(callable) ? REGTYPE_EXACT : optimize_typeprecision(type);
+    optimize_settype(opt, r, type, info);
+}
+
+static bool _metafunctionhasselfdispatch(optimizer *opt, objectmetafunction *mfn) {
+    for (int i=0; i<mfn->fns.count; i++) {
+        value fn = mfn->fns.data[i];
+        if (MORPHO_ISFUNCTION(fn) &&
+            functioninfolist_hasflags(&opt->functioninfo, MORPHO_GETFUNCTION(fn), FUNCTIONINFO_USESELF_DISPATCH)) return true;
+    }
+
+    return false;
+}
+
+static value _trackreducedmetafunctioncall(optimizer *opt, objectfunction *current, value callable, registerindx argstart, int nargs, bool *freecallable) {
+    if (freecallable) *freecallable = false;
+    if (!MORPHO_ISMETAFUNCTION(callable)) return callable;
+
+    objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(callable);
+    if (_metafunctionhasselfdispatch(opt, mfn)) return callable;
+
+    value reduced = MORPHO_NIL;
+    value types[nargs];
+    for (registerindx i=0; i<nargs; i++) {
+        registerindx r = argstart + i;
+        value type = optimize_type(opt, r);
+        if (!optimize_hasexacttype(opt, r)) type = MORPHO_NIL;
+
+        types[i] = type;
+    }
+
+    error reduceerr;
+    error_init(&reduceerr);
+    /* TODO: Replace this tracking-side reduction with a metafunction API that
+       can expose reduced return/callee information without opcodes.c peeking
+       into metafunction internals. */
+    if (metafunction_reduce(mfn, nargs, types, &reduceerr, &reduced) &&
+        !MORPHO_ISEQUAL(reduced, callable)) {
+        if (MORPHO_ISFUNCTION(reduced)) {
+            if (MORPHO_GETFUNCTION(reduced)==current) optimize_markrecursive(opt, current);
+            optimize_recordcallsite(opt, MORPHO_GETFUNCTION(reduced), argstart, nargs, REGISTER_UNALLOCATED);
+        }
+        if (freecallable && MORPHO_ISMETAFUNCTION(reduced)) *freecallable = true;
+        error_clear(&reduceerr);
+        return reduced;
+    }
+
+    error_clear(&reduceerr);
+    return callable;
+}
+
 void call_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     registerindx a = DECODE_A(instr);
@@ -161,7 +232,6 @@ void call_trackingfn(optimizer *opt) {
     reginfolist_generalizecontent(&opt->rlist, REG_GLOBAL);
     reginfolist_generalizecontent(&opt->rlist, REG_UPVALUE);
     
-    value type=MORPHO_NIL;
     value content=MORPHO_NIL;
     indx cindx;
     if (optimize_isconstant(opt, a, &cindx)) {
@@ -178,49 +248,22 @@ void call_trackingfn(optimizer *opt) {
         optimize_markrecursive(opt, current);
     }
     
+    bool freecallable = false;
+    value returncallable = content;
     if (MORPHO_ISFUNCTION(content)) {
         if (MORPHO_GETFUNCTION(content)==current) optimize_markrecursive(opt, current);
         optimize_recordcallsite(opt, MORPHO_GETFUNCTION(content), a+1, nargs, REGISTER_UNALLOCATED);
-    } else if (MORPHO_ISMETAFUNCTION(content)) {
-        objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(content);
-        value types[nargs];
-        value reduced=MORPHO_NIL;
-        error reduceerr = opt->err;
-
-        for (registerindx i=0; i<nargs; i++) {
-            registerindx r = a + i + 1;
-            value argtype = optimize_type(opt, r);
-            if (!optimize_hasexacttype(opt, r)) argtype=MORPHO_NIL;
-            types[i]=argtype;
-        }
-
-        if (metafunction_reduce(mfn, nargs, types, &reduceerr, &reduced)) {
-            if (MORPHO_ISFUNCTION(reduced)) {
-                if (MORPHO_GETFUNCTION(reduced)==current) optimize_markrecursive(opt, current);
-                optimize_recordcallsite(opt, MORPHO_GETFUNCTION(reduced), a+1, nargs, REGISTER_UNALLOCATED);
-            }
-        }
+    } else {
+        returncallable = _trackreducedmetafunctioncall(opt, current, content, a+1, nargs, &freecallable);
     }
 
-    if (MORPHO_ISCLASS(content)) {
-        type=content;
-    } else if (MORPHO_ISFUNCTION(content)) {
-        type=signature_getreturntype(&MORPHO_GETFUNCTION(content)->sig);
-    } else if (MORPHO_ISBUILTINFUNCTION(content)) {
-        type=signature_getreturntype(&MORPHO_GETBUILTINFUNCTION(content)->sig);
-    } else if (MORPHO_ISMETAFUNCTION(content)) {
-        metafunction_inferreturntype(MORPHO_GETMETAFUNCTION(content), &type);
-    }
-    
     for (registerindx i=1; i<=nargs+2*nopt; i++) {
         optimize_writevalue(opt, a+i);
     }
     
     optimize_writevalue(opt, a);
-    if (!MORPHO_ISNIL(type)) {
-        regtypeinfo info = MORPHO_ISCLASS(content) ? REGTYPE_EXACT : optimize_typeprecision(type);
-        optimize_settype(opt, a, type, info);
-    }
+    _applyreturntypefact(opt, a, returncallable);
+    if (freecallable) morpho_freeobject(returncallable);
 }
 
 void invoke_trackingfn(optimizer *opt) {
@@ -228,12 +271,15 @@ void invoke_trackingfn(optimizer *opt) {
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
     objectfunction *current = optimize_currentblock(opt)->func;
+    value method=MORPHO_NIL;
 
     if (DECODE_OP(instr)==OP_METHOD) {
         indx kindx;
         if (optimize_isconstant(opt, a, &kindx)) {
-            value method = optimize_getconstant(opt, kindx);
-            if (MORPHO_ISFUNCTION(method)) optimize_recordcallsite(opt, MORPHO_GETFUNCTION(method), a+2, nargs, a+1);
+            method = optimize_getconstant(opt, kindx);
+            if (MORPHO_ISFUNCTION(method)) {
+                optimize_recordcallsite(opt, MORPHO_GETFUNCTION(method), a+2, nargs, a+1);
+            }
         }
     }
 
@@ -247,6 +293,7 @@ void invoke_trackingfn(optimizer *opt) {
     }
     
     optimize_writevalue(opt, a+1);
+    _applyreturntypefact(opt, a+1, method);
 }
 
 void lup_trackingfn(optimizer *opt) {
