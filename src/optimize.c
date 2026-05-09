@@ -594,66 +594,211 @@ static void _optimize_classinfo_markconstants(varray_value *konst, classinfolist
     for (unsigned int i=0; i<konst->count; i++) _optimize_classinfo_mark(konst->data[i], out);
 }
 
-/* Track direct constructor/class flows through constants, moves, and globals. */
-static void _optimize_classinfo_scanfunction(optimizer *opt, objectfunction *func, classinfolist *out, globalinfolist *globals, bool trackglobalstores) {
+typedef struct {
+    optimizer *opt;
+    objectfunction *func;
+    globalinfolist *globals;
     value regs[MORPHO_MAXREGISTERS];
+    bool trackglobalstores;
+    void (*onglobalstore)(instruction instr, value val, void *ctx);
+    void (*onglobalload)(instruction instr, value val, void *ctx);
+    void (*oncalllike)(instruction instr, value *regs, void *ctx);
+    void (*oninstruction)(instruction instr, value *regs, void *ctx);
+    void *ctx;
+} _optimize_ipascanstate;
 
-    for (int i=0; i<MORPHO_MAXREGISTERS; i++) regs[i]=MORPHO_NIL;
+typedef void (*_optimize_ipastepfn) (_optimize_ipascanstate *state, instruction instr);
+
+typedef struct {
+    instruction op;
+    _optimize_ipastepfn fn;
+} _optimize_ipastep;
+
+static void _optimize_ipastoreglobal(_optimize_ipascanstate *state, int gindx, value val) {
+    globalinfolist_store(state->globals, gindx);
+    if (MORPHO_ISFUNCTION(val) || MORPHO_ISMETAFUNCTION(val) ||
+        MORPHO_ISCLASS(val) || MORPHO_ISSTRING(val)) {
+        globalinfolist_setconstant(state->globals, gindx, val);
+    } else {
+        globalinfolist_setvalue(state->globals, gindx);
+    }
+}
+
+static void _optimize_ipainstruction(_optimize_ipascanstate *state, instruction instr) {
+    if (state->oninstruction) state->oninstruction(instr, state->regs, state->ctx);
+}
+
+static void _optimize_ipaop_lct(_optimize_ipascanstate *state, instruction instr) {
+    indx kindx = DECODE_Bx(instr);
+    registerindx a = DECODE_A(instr);
+
+    state->regs[a] = (kindx<state->func->konst.count) ? state->func->konst.data[kindx] : MORPHO_NIL;
+}
+
+static void _optimize_ipaop_mov(_optimize_ipascanstate *state, instruction instr) {
+    state->regs[DECODE_A(instr)] = state->regs[DECODE_B(instr)];
+}
+
+static void _optimize_ipaop_sgl(_optimize_ipascanstate *state, instruction instr) {
+    registerindx a = DECODE_A(instr);
+    int gindx = DECODE_Bx(instr);
+
+    if (state->trackglobalstores) _optimize_ipastoreglobal(state, gindx, state->regs[a]);
+    if (state->onglobalstore) state->onglobalstore(instr, state->regs[a], state->ctx);
+}
+
+static void _optimize_ipaop_lgl(_optimize_ipascanstate *state, instruction instr) {
+    registerindx a = DECODE_A(instr);
+    int gindx = DECODE_Bx(instr);
+
+    globalinfolist_read(state->globals, gindx);
+    if (!globalinfolist_isconstant(state->globals, gindx, &state->regs[a])) state->regs[a]=MORPHO_NIL;
+    if (state->onglobalload) state->onglobalload(instr, state->regs[a], state->ctx);
+}
+
+static void _optimize_ipaop_calllike(_optimize_ipascanstate *state, instruction instr) {
+    instruction op = DECODE_OP(instr);
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    registerindx firstoverwritten = a + (op==OP_CALL ? 0 : 1);
+    registerindx lastoverwritten = a + nargs + 2*nopt + (op==OP_CALL ? 0 : 1);
+
+    if (state->oncalllike) state->oncalllike(instr, state->regs, state->ctx);
+
+    /* Mirror opcode tracking by dropping all consumed call/result slots to
+       generic values so stale callable/class constants do not leak forward. */
+    for (registerindx r=firstoverwritten; r<=lastoverwritten; r++) {
+        state->regs[r] = MORPHO_NIL;
+    }
+}
+
+static void _optimize_ipaop_closure(_optimize_ipascanstate *state, instruction instr) {
+    _optimize_ipainstruction(state, instr);
+}
+
+static void _optimize_ipaop_lpr(_optimize_ipascanstate *state, instruction instr) {
+    _optimize_ipainstruction(state, instr);
+    state->regs[DECODE_A(instr)] = MORPHO_NIL;
+}
+
+static void _optimize_ipaop_sideeffect(_optimize_ipascanstate *state, instruction instr) {
+    _optimize_ipainstruction(state, instr);
+}
+
+static void _optimize_ipaop_cat(_optimize_ipascanstate *state, instruction instr) {
+    _optimize_ipainstruction(state, instr);
+    state->regs[DECODE_A(instr)] = MORPHO_NIL;
+}
+
+static void _optimize_ipaop_default(_optimize_ipascanstate *state, instruction instr) {
+    registerindx overwrites;
+
+    _optimize_ipainstruction(state, instr);
+    if (opcode_overwritesforinstruction(instr, &overwrites)) state->regs[overwrites]=MORPHO_NIL;
+}
+
+static _optimize_ipastep _optimize_ipasteps[] = {
+    { OP_LCT, _optimize_ipaop_lct },
+    { OP_MOV, _optimize_ipaop_mov },
+    { OP_SGL, _optimize_ipaop_sgl },
+    { OP_LGL, _optimize_ipaop_lgl },
+    { OP_CALL, _optimize_ipaop_calllike },
+    { OP_METHOD, _optimize_ipaop_calllike },
+    { OP_INVOKE, _optimize_ipaop_calllike },
+    { OP_CLOSURE, _optimize_ipaop_closure },
+    { OP_LPR, _optimize_ipaop_lpr },
+    { OP_RETURN, _optimize_ipaop_sideeffect },
+    { OP_SPR, _optimize_ipaop_sideeffect },
+    { OP_SUP, _optimize_ipaop_sideeffect },
+    { OP_CAT, _optimize_ipaop_cat },
+    { OP_END, NULL }
+};
+
+static void _optimize_ipastepinstruction(_optimize_ipascanstate *state, instruction instr) {
+    for (_optimize_ipastep *step=_optimize_ipasteps; step->op!=OP_END; step++) {
+        if (step->op==DECODE_OP(instr)) {
+            step->fn(state, instr);
+            return;
+        }
+    }
+
+    _optimize_ipaop_default(state, instr);
+}
+
+static void _optimize_ipascanfunction(_optimize_ipascanstate *state) {
+    optimizer *opt = state->opt;
+    objectfunction *func = state->func;
+
+    for (int i=0; i<MORPHO_MAXREGISTERS; i++) state->regs[i]=MORPHO_NIL;
 
     for (blockindx b=0; b<opt->graph.count; b++) {
         block *blk = &opt->graph.data[b];
         if (blk->func!=func) continue;
 
         for (instructionindx i=blk->start; i<=blk->end; i++) {
-            instruction instr = opt->prog->code.data[i];
-            instruction op = DECODE_OP(instr);
-            registerindx a = DECODE_A(instr);
-            int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
-
-            switch (op) {
-                case OP_LCT: {
-                    indx kindx = DECODE_Bx(instr);
-                    regs[a] = (kindx<func->konst.count) ? func->konst.data[kindx] : MORPHO_NIL;
-                    break;
-                }
-                case OP_MOV: regs[a] = regs[DECODE_B(instr)]; break;
-                case OP_SGL: {
-                    int gindx = DECODE_Bx(instr);
-                    if (trackglobalstores) {
-                        globalinfolist_store(globals, gindx);
-                        if (MORPHO_ISCLASS(regs[DECODE_A(instr)])) {
-                            globalinfolist_setconstant(globals, gindx, regs[DECODE_A(instr)]);
-                        } else {
-                            globalinfolist_setvalue(globals, gindx);
-                        }
-                    }
-                    break;
-                }
-                case OP_LGL: {
-                    int gindx = DECODE_Bx(instr);
-                    globalinfolist_read(globals, gindx);
-                    if (!globalinfolist_isconstant(globals, gindx, &regs[a])) regs[a]=MORPHO_NIL;
-                    _optimize_classinfo_mark(regs[a], out);
-                    break;
-                }
-                case OP_INVOKE:
-                case OP_METHOD:
-                case OP_CALL: {
-                    registerindx receiver = a + (op==OP_CALL ? 0 : 1);
-
-                    _optimize_classinfo_mark(regs[receiver], out);
-                    _optimize_classinfo_markregister(regs, receiver+1, nargs+2*nopt, out);
-                    regs[receiver] = MORPHO_NIL;
-                    break;
-                }
-                default: {
-                    registerindx overwrites;
-                    if (opcode_overwritesforinstruction(instr, &overwrites)) regs[overwrites]=MORPHO_NIL;
-                    break;
-                }
-            }
+            _optimize_ipastepinstruction(state, opt->prog->code.data[i]);
         }
     }
+}
+
+typedef struct {
+    classinfolist *out;
+} _optimize_classscanctx;
+
+typedef void (*_optimize_classscanstepfn) (_optimize_classscanctx *classctx, instruction instr, value *regs);
+
+typedef struct {
+    instruction op;
+    _optimize_classscanstepfn fn;
+} _optimize_classscanstep;
+
+static void _optimize_classscan_onglobalload(instruction instr, value val, void *ctx) {
+    _optimize_classscanctx *classctx = (_optimize_classscanctx *) ctx;
+    _optimize_classinfo_mark(val, classctx->out);
+}
+
+static void _optimize_classscan_opcalllike(_optimize_classscanctx *classctx, instruction instr, value *regs) {
+    instruction op = DECODE_OP(instr);
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+    registerindx receiver = a + (op==OP_CALL ? 0 : 1);
+
+    _optimize_classinfo_mark(regs[receiver], classctx->out);
+    _optimize_classinfo_markregister(regs, receiver+1, nargs+2*nopt, classctx->out);
+}
+
+static _optimize_classscanstep _optimize_classscansteps[] = {
+    { OP_CALL, _optimize_classscan_opcalllike },
+    { OP_METHOD, _optimize_classscan_opcalllike },
+    { OP_INVOKE, _optimize_classscan_opcalllike },
+    { OP_END, NULL }
+};
+
+static void _optimize_classscan_oncalllike(instruction instr, value *regs, void *ctx) {
+    _optimize_classscanctx *classctx = (_optimize_classscanctx *) ctx;
+
+    for (_optimize_classscanstep *step=_optimize_classscansteps; step->op!=OP_END; step++) {
+        if (step->op==DECODE_OP(instr)) {
+            step->fn(classctx, instr, regs);
+            return;
+        }
+    }
+}
+
+/* Track direct constructor/class flows through constants, moves, and globals. */
+static void _optimize_classinfo_scanfunction(optimizer *opt, objectfunction *func, classinfolist *out, globalinfolist *globals, bool trackglobalstores) {
+    _optimize_classscanctx classctx = { .out=out };
+    _optimize_ipascanstate state = {
+        .opt=opt,
+        .func=func,
+        .globals=globals,
+        .trackglobalstores=trackglobalstores,
+        .onglobalload=_optimize_classscan_onglobalload,
+        .oncalllike=_optimize_classscan_oncalllike,
+        .ctx=&classctx
+    };
+
+    _optimize_ipascanfunction(&state);
 }
 
 static void _optimize_classinfo_processcomponent(optimizer *opt, value comp, dictionary *components, globalinfolist *globals) {
@@ -688,6 +833,304 @@ static void optimize_classinfo(optimizer *opt) {
     dictionary_init(&components);
     _optimize_classinfo_processcomponent(opt, MORPHO_OBJECT(opt->prog->global), &components, &opt->glist);
     dictionary_clear(&components);
+}
+
+static bool _optimize_marklivefunction(objectfunction *func, dictionary *live, varray_value *worklist) {
+    value key = MORPHO_OBJECT(func);
+
+    if (dictionary_get(live, key, NULL)) return false;
+    dictionary_insert(live, key, MORPHO_NIL);
+    varray_valuewrite(worklist, key);
+    return true;
+}
+
+static void _optimize_marklivecallable(optimizer *opt, value val, dictionary *live, varray_value *worklist) {
+    if (MORPHO_ISFUNCTION(val)) {
+        _optimize_marklivefunction(MORPHO_GETFUNCTION(val), live, worklist);
+    } else if (MORPHO_ISMETAFUNCTION(val)) {
+        objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(val);
+        for (unsigned int i=0; i<mfn->fns.count; i++) {
+            value fn = mfn->fns.data[i];
+            if (MORPHO_ISFUNCTION(fn)) _optimize_marklivefunction(MORPHO_GETFUNCTION(fn), live, worklist);
+        }
+    } else if (MORPHO_ISCLASS(val)) {
+        objectstring initlabel = MORPHO_STATICSTRING("init");
+        value method;
+
+        if (morpho_lookupmethod(val, MORPHO_OBJECT(&initlabel), &method)) {
+            _optimize_marklivecallable(opt, method, live, worklist);
+        }
+    }
+}
+
+static void _optimize_markallmethods_live(optimizer *opt, dictionary *live, varray_value *worklist) {
+    for (unsigned int i=0; i<opt->prog->classes.count; i++) {
+        objectclass *klass = MORPHO_GETCLASS(opt->prog->classes.data[i]);
+
+        for (int j=0; j<klass->methods.capacity; j++) {
+            value label = klass->methods.contents[j].key;
+            if (MORPHO_ISNIL(label)) continue;
+
+            _optimize_marklivecallable(opt, klass->methods.contents[j].val, live, worklist);
+        }
+    }
+}
+
+static void _optimize_markmethodsforlabel_live(optimizer *opt, value label, dictionary *live, varray_value *worklist);
+
+static void _optimize_marklabelmethods_live(optimizer *opt, value label, dictionary *live, varray_value *worklist, bool *disablemethodpruning) {
+    if (!MORPHO_ISSTRING(label)) return;
+
+    if (strcmp(MORPHO_GETCSTRING(label), "invoke")==0) {
+        if (disablemethodpruning) *disablemethodpruning=true;
+        _optimize_markallmethods_live(opt, live, worklist);
+    } else {
+        _optimize_markmethodsforlabel_live(opt, label, live, worklist);
+    }
+}
+
+static void _optimize_markmethodsforlabel_live(optimizer *opt, value label, dictionary *live, varray_value *worklist) {
+    for (unsigned int i=0; i<opt->prog->classes.count; i++) {
+        objectclass *klass = MORPHO_GETCLASS(opt->prog->classes.data[i]);
+        value method;
+        bool found = morpho_lookupmethod(MORPHO_OBJECT(klass), label, &method);
+
+        if (found) {
+            _optimize_marklivecallable(opt, method, live, worklist);
+        }
+    }
+}
+
+static void _optimize_markescapedcallables_live(optimizer *opt, value *regs, registerindx start, int count, dictionary *live, varray_value *worklist) {
+    for (registerindx i=0; i<count; i++) {
+        _optimize_marklivecallable(opt, regs[start+i], live, worklist);
+    }
+}
+
+static bool _optimize_isuntrustedbuiltin(value val) {
+    if (!MORPHO_ISBUILTINFUNCTION(val)) return false;
+
+    objectbuiltinfunction *builtin = MORPHO_GETBUILTINFUNCTION(val);
+    return ((builtin->flags & MORPHO_FN_REENTRANT) ||
+            (builtin->flags == BUILTIN_FLAGSEMPTY));
+}
+
+static bool _optimize_labelmatchesuntrustedbuiltin(optimizer *opt, value label) {
+    if (!MORPHO_ISSTRING(label)) return false;
+
+    for (unsigned int i=0; i<opt->prog->classes.count; i++) {
+        objectclass *klass = MORPHO_GETCLASS(opt->prog->classes.data[i]);
+        value method;
+
+        if (morpho_lookupmethod(MORPHO_OBJECT(klass), label, &method) &&
+            _optimize_isuntrustedbuiltin(method)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+typedef struct {
+    optimizer *opt;
+    dictionary *live;
+    varray_value *worklist;
+    bool *disablemethodpruning;
+} _optimize_functionscanctx;
+
+typedef void (*_optimize_functionscanstepfn) (_optimize_functionscanctx *fnctx, instruction instr, value *regs);
+
+typedef struct {
+    instruction op;
+    _optimize_functionscanstepfn fn;
+    const char *leftlabel;
+    const char *rightlabel;
+} _optimize_functionscanstep;
+
+static void _optimize_preserveuntrustedbuiltinmethods(_optimize_functionscanctx *fnctx, value callee) {
+    if (!fnctx->disablemethodpruning) return;
+
+    if (_optimize_isuntrustedbuiltin(callee) ||
+        _optimize_labelmatchesuntrustedbuiltin(fnctx->opt, callee)) {
+        if (!*fnctx->disablemethodpruning) {
+            *fnctx->disablemethodpruning = true;
+            _optimize_markallmethods_live(fnctx->opt, fnctx->live, fnctx->worklist);
+        }
+    }
+}
+
+static void _optimize_functionscan_onglobalstore(instruction instr, value val, void *ctx) {
+    _optimize_functionscanctx *fnctx = (_optimize_functionscanctx *) ctx;
+    _optimize_marklivecallable(fnctx->opt, val, fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opcall(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    _optimize_preserveuntrustedbuiltinmethods(fnctx, regs[a]);
+    _optimize_marklivecallable(fnctx->opt, regs[a], fnctx->live, fnctx->worklist);
+    _optimize_markescapedcallables_live(fnctx->opt, regs, a+1, nargs+2*nopt, fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opmethod(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    _optimize_preserveuntrustedbuiltinmethods(fnctx, regs[a]);
+    if (MORPHO_ISSTRING(regs[a])) {
+        _optimize_marklabelmethods_live(fnctx->opt, regs[a], fnctx->live, fnctx->worklist, fnctx->disablemethodpruning);
+    } else {
+        _optimize_marklivecallable(fnctx->opt, regs[a], fnctx->live, fnctx->worklist);
+    }
+    _optimize_markescapedcallables_live(fnctx->opt, regs, a+2, nargs+2*nopt, fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opinvoke(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    _optimize_preserveuntrustedbuiltinmethods(fnctx, regs[a]);
+    _optimize_marklabelmethods_live(fnctx->opt, regs[a], fnctx->live, fnctx->worklist, fnctx->disablemethodpruning);
+    _optimize_markescapedcallables_live(fnctx->opt, regs, a+2, nargs+2*nopt, fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opreturn(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    registerindx a = DECODE_A(instr);
+
+    if (a>0) _optimize_marklivecallable(fnctx->opt, regs[DECODE_B(instr)], fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opclosure(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    _optimize_marklivecallable(fnctx->opt, regs[DECODE_A(instr)], fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_oplpr(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    _optimize_marklabelmethods_live(fnctx->opt, regs[DECODE_C(instr)], fnctx->live, fnctx->worklist, fnctx->disablemethodpruning);
+}
+
+static void _optimize_functionscan_opspr(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    _optimize_marklivecallable(fnctx->opt, regs[DECODE_C(instr)], fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opsup(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    _optimize_marklivecallable(fnctx->opt, regs[DECODE_B(instr)], fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opcat(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    objectstring tostringlabel = MORPHO_STATICSTRING("tostring");
+
+    (void) instr;
+    (void) regs;
+
+    /* `cat` may stringify objects via `tostring`, so keep those methods live. */
+    _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&tostringlabel), fnctx->live, fnctx->worklist);
+}
+
+static _optimize_functionscanstep _optimize_functionscansteps[] = {
+    { OP_CALL, _optimize_functionscan_opcall, NULL, NULL },
+    { OP_METHOD, _optimize_functionscan_opmethod, NULL, NULL },
+    { OP_INVOKE, _optimize_functionscan_opinvoke, NULL, NULL },
+    { OP_RETURN, _optimize_functionscan_opreturn, NULL, NULL },
+    { OP_CLOSURE, _optimize_functionscan_opclosure, NULL, NULL },
+    { OP_LPR, _optimize_functionscan_oplpr, NULL, NULL },
+    { OP_SPR, _optimize_functionscan_opspr, NULL, NULL },
+    { OP_SUP, _optimize_functionscan_opsup, NULL, NULL },
+    { OP_CAT, _optimize_functionscan_opcat, NULL, NULL },
+    { OP_ADD, NULL, MORPHO_ADD_METHOD, MORPHO_ADDR_METHOD },
+    { OP_SUB, NULL, MORPHO_SUB_METHOD, MORPHO_SUBR_METHOD },
+    { OP_MUL, NULL, MORPHO_MUL_METHOD, MORPHO_MULR_METHOD },
+    { OP_DIV, NULL, MORPHO_DIV_METHOD, MORPHO_DIVR_METHOD },
+    { OP_POW, NULL, MORPHO_POW_METHOD, MORPHO_POWR_METHOD },
+    { OP_END, NULL, NULL, NULL }
+};
+
+static void _optimize_functionscan_step(instruction instr, value *regs, void *ctx) {
+    _optimize_functionscanctx *fnctx = (_optimize_functionscanctx *) ctx;
+    instruction op = DECODE_OP(instr);
+
+    for (int i=0; _optimize_functionscansteps[i].op!=OP_END; i++) {
+        if (_optimize_functionscansteps[i].op==op) {
+            if (_optimize_functionscansteps[i].fn) {
+                _optimize_functionscansteps[i].fn(fnctx, instr, regs);
+            } else {
+                objectstring left = MORPHO_STATICSTRING((char *) _optimize_functionscansteps[i].leftlabel);
+                objectstring right = MORPHO_STATICSTRING((char *) _optimize_functionscansteps[i].rightlabel);
+
+                _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&left), fnctx->live, fnctx->worklist);
+                _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&right), fnctx->live, fnctx->worklist);
+            }
+            return;
+        }
+    }
+}
+
+static void optimize_functionliveness(optimizer *opt, dictionary *live, bool *disablemethodpruning) {
+    varray_value worklist;
+    _optimize_functionscanctx fnctx = {
+        .opt=opt,
+        .live=live,
+        .worklist=&worklist,
+        .disablemethodpruning=disablemethodpruning
+    };
+
+    *disablemethodpruning=false;
+    dictionary_init(live);
+    varray_valueinit(&worklist);
+    globalinfolist_startpass(&opt->glist);
+
+    _optimize_marklivefunction(opt->prog->global, live, &worklist);
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
+
+        if (!block_isentry(blk) || blk->func==opt->prog->global) continue;
+        if (_optimize_functionescapes(opt, blk->func)) {
+            _optimize_marklivefunction(blk->func, live, &worklist);
+        }
+    }
+
+    while (worklist.count>0) {
+        value fnval;
+        varray_valuepop(&worklist, &fnval);
+        if (MORPHO_ISFUNCTION(fnval)) {
+            _optimize_ipascanstate state = {
+                .opt=opt,
+                .func=MORPHO_GETFUNCTION(fnval),
+                .globals=&opt->glist,
+                .trackglobalstores=true,
+                .onglobalstore=_optimize_functionscan_onglobalstore,
+                .oncalllike=_optimize_functionscan_step,
+                .oninstruction=_optimize_functionscan_step,
+                .ctx=&fnctx
+            };
+            _optimize_ipascanfunction(&state);
+        }
+    }
+
+    varray_valueclear(&worklist);
+}
+
+static void optimize_prunedeadfunctionblocks(optimizer *opt, dictionary *live, bool disablemethodpruning) {
+    for (blockindx i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
+        value key;
+        bool islive, escapes, keepmethods;
+
+        if (!block_isentry(blk) || blk->func==opt->prog->global) continue;
+
+        key = MORPHO_OBJECT(blk->func);
+        islive = dictionary_get(live, key, NULL);
+        escapes = _optimize_functionescapes(opt, blk->func);
+        keepmethods = (disablemethodpruning && blk->func->klass);
+
+        if (islive) continue;
+        if (escapes) continue;
+        if (keepmethods) continue;
+
+        blk->isentry=false;
+        opt->reachabledirty=true;
+        _pruneunreachableblock(opt, i);
+    }
 }
 
 static bool _optimize_isdeadclass(optimizer *opt, objectclass *klass, dictionary *cache) {
@@ -1666,6 +2109,8 @@ void optimize_pass(optimizer *opt, int n) {
 /** Public interface to optimizer */
 bool optimize(program *in) {
     optimizer opt;
+    dictionary livefunctions;
+    bool disablemethodpruning=false;
     
     optimizer_init(&opt, in);
     
@@ -1681,6 +2126,12 @@ bool optimize(program *in) {
     // Perform optimization passes
     for (int i=0; i<3 && !optimize_checkerror(&opt); i++) {
         optimize_pass(&opt, i);
+    }
+
+    if (!optimize_checkerror(&opt)) {
+        optimize_functionliveness(&opt, &livefunctions, &disablemethodpruning);
+        optimize_prunedeadfunctionblocks(&opt, &livefunctions, disablemethodpruning);
+        dictionary_clear(&livefunctions);
     }
     
     if (opt.verbose) globalinfolist_show(&opt.glist);

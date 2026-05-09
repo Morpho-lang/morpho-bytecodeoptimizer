@@ -135,8 +135,8 @@ void cmp_trackingfn(optimizer *opt) {
     optimize_settype(opt, DECODE_A(instr), typebool);
 }
 
-static void _trackescapedcallables(optimizer *opt, objectfunction *current, registerindx argstart, int nargs) {
-    for (registerindx i=0; i<nargs; i++) {
+static void _trackescapedcallables(optimizer *opt, objectfunction *current, registerindx argstart, int count) {
+    for (registerindx i=0; i<count; i++) {
         registerindx r = argstart+i;
         indx kindx;
 
@@ -170,7 +170,7 @@ void call_trackingfn(optimizer *opt) {
         content = globalinfolist_type(optimize_globalinfolist(opt), (int) cindx);
     }
 
-    _trackescapedcallables(opt, current, a+1, nargs);
+    _trackescapedcallables(opt, current, a+1, nargs+2*nopt);
     
     if (current && !current->klass &&
         ((a==0 && current!=opt->prog->global) ||
@@ -237,7 +237,7 @@ void invoke_trackingfn(optimizer *opt) {
     /* Method dispatch has the same nonlocal side-effect risk as a direct call. */
     reginfolist_generalizecontent(&opt->rlist, REG_GLOBAL);
     reginfolist_generalizecontent(&opt->rlist, REG_UPVALUE);
-    _trackescapedcallables(opt, current, a+2, nargs);
+    _trackescapedcallables(opt, current, a+2, nargs+2*nopt);
     
     for (registerindx i=2; i<=nargs+2*nopt+1; i++) {
         optimize_writevalue(opt, a+i);
