@@ -80,6 +80,7 @@ void optimize_copyregister(optimizer *opt, registerindx dest, registerindx src);
 void optimize_writevalue(optimizer *opt, registerindx i);
 void optimize_settype(optimizer *opt, registerindx i, value type, regtypeinfo info);
 void optimize_setexacttype(optimizer *opt, registerindx i, value type);
+regtypeinfo optimize_typeprecision(value type);
 value optimize_type(optimizer *opt, registerindx r);
 regtypeinfo optimize_typeinfo(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);

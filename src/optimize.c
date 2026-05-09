@@ -171,6 +171,12 @@ void optimize_setexacttype(optimizer *opt, registerindx r, value type) {
     optimize_settype(opt, r, type, REGTYPE_EXACT);
 }
 
+/** Infer the strongest safe precision for a type fact. */
+regtypeinfo optimize_typeprecision(value type) {
+    if (!MORPHO_ISCLASS(type)) return REGTYPE_UNKNOWN;
+    return (MORPHO_GETCLASS(type)->children.count==0) ? REGTYPE_EXACT : REGTYPE_SUBTYPE;
+}
+
 /** Callback function to get the type of a register */
 value optimize_type(optimizer *opt, registerindx r) {
     return reginfolist_type(&opt->rlist, r);

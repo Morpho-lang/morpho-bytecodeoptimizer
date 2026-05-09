@@ -218,7 +218,7 @@ void call_trackingfn(optimizer *opt) {
     
     optimize_writevalue(opt, a);
     if (!MORPHO_ISNIL(type)) {
-        regtypeinfo info = (MORPHO_ISCLASS(content) ? REGTYPE_EXACT : REGTYPE_UNKNOWN);
+        regtypeinfo info = MORPHO_ISCLASS(content) ? REGTYPE_EXACT : optimize_typeprecision(type);
         optimize_settype(opt, a, type, info);
     }
 }
