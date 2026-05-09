@@ -317,14 +317,14 @@ static bool _optimize_recordcallarg(optimizer *opt, functioninputinfo *info, reg
     return _optimize_setfunctioninputfact(opt, info, dest, &incoming);
 }
 
-static bool _optimize_classisderivedfrom(objectclass *klass, objectclass *base) {
+bool optimize_classisderivedfrom(objectclass *klass, objectclass *base) {
     if (!klass || !base) return false;
     if (klass==base) return true;
 
     for (unsigned int i=0; i<base->children.count; i++) {
         value child = base->children.data[i];
         if (MORPHO_ISCLASS(child) &&
-            _optimize_classisderivedfrom(klass, MORPHO_GETCLASS(child))) return true;
+            optimize_classisderivedfrom(klass, MORPHO_GETCLASS(child))) return true;
     }
 
     return false;
@@ -337,7 +337,7 @@ static bool _optimize_canspecializeself(optimizer *opt, objectfunction *func, re
     value selftype = optimize_type(opt, selfreg);
     if (!MORPHO_ISCLASS(selftype)) return false;
 
-    return _optimize_classisderivedfrom(MORPHO_GETCLASS(selftype), func->klass);
+    return optimize_classisderivedfrom(MORPHO_GETCLASS(selftype), func->klass);
 }
 
 bool optimize_recordcallsite(optimizer *opt, objectfunction *func, registerindx argstart, int nargs, registerindx selfreg) {

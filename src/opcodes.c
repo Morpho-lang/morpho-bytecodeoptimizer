@@ -82,8 +82,10 @@ void lgl_trackingfn(optimizer *opt) {
     optimize_write(opt, rindx, REG_GLOBAL, DECODE_Bx(instr));
     
     value type = MORPHO_NIL;
+    regtypeinfo typeinfo = REGTYPE_UNKNOWN;
     type=globalinfolist_type(optimize_globalinfolist(opt), DECODE_Bx(instr));
-    optimize_settype(opt, rindx, type, REGTYPE_UNKNOWN);
+    typeinfo=globalinfolist_typeinfo(optimize_globalinfolist(opt), DECODE_Bx(instr));
+    optimize_settype(opt, rindx, type, typeinfo);
 }
 
 void sgl_trackingfn(optimizer *opt) {
@@ -103,7 +105,8 @@ void sgl_trackingfn(optimizer *opt) {
     } else globalinfolist_setvalue(glist, gindx);
     
     value type = optimize_type(opt, rindx);
-    globalinfolist_settype(glist, gindx, type);
+    regtypeinfo typeinfo = optimize_typeinfo(opt, rindx);
+    globalinfolist_settype(glist, gindx, type, typeinfo);
 }
 
 void arith_trackingfn(optimizer *opt) {

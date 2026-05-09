@@ -8,6 +8,7 @@
 #define info_h
 
 #include "morphocore.h"
+#include "reginfo.h"
 
 /* **********************************************************************
  * Information about globals
@@ -26,7 +27,9 @@ typedef struct {
     int nstore; /** Number of times global is stored to */
     int nread; /** Number of times global is read from */
     varray_value typeassignments; /** A dictionary of types stored to this global in the current pass */
+    regtypeinfo typeassignmentinfo; /** Conservatively merged precision for current-pass type assignments */
     value type;
+    regtypeinfo typeinfo;
 } glblinfo;
 
 typedef struct {
@@ -42,8 +45,9 @@ void globalinfolist_setconstant(globalinfolist *glist, int gindx, value konst);
 
 bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst);
 
-void globalinfolist_settype(globalinfolist *glist, int gindx, value type);
+void globalinfolist_settype(globalinfolist *glist, int gindx, value type, regtypeinfo info);
 value globalinfolist_type(globalinfolist *glist, int gindx);
+regtypeinfo globalinfolist_typeinfo(globalinfolist *glist, int gindx);
 
 void globalinfolist_store(globalinfolist *glist, int gindx);
 int globalinfolist_countstore(globalinfolist *glist, int gindx);

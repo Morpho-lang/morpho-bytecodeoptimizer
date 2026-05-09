@@ -660,23 +660,33 @@ bool strategy_load_index_list(optimizer *opt) {
 bool strategy_method_resolution(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     bool success=false;
+    objectfunction *current = optimize_currentblock(opt)->func;
     
     registerindx receiver = DECODE_A(instr)+1;
     value type = optimize_type(opt, receiver);
     indx kindx;
     
-    if (MORPHO_ISEQUAL(type, typeclass)) return false;
-    
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
         optimize_isconstant(opt, DECODE_A(instr), &kindx) &&
         optimize_hasuniquetype(opt, receiver)) {
-        
-        objectclass *klass = MORPHO_GETCLASS(type);
         value label = optimize_getconstant(opt, kindx);
-        
+        value dispatchtarget = type;
+        bool isclassreceiver = MORPHO_ISEQUAL(type, typeclass);
+
+        if (isclassreceiver) {
+            indx recvkindx;
+
+            if (!optimize_isconstant(opt, receiver, &recvkindx)) return false;
+            dispatchtarget = optimize_getconstant(opt, recvkindx);
+            if (!MORPHO_ISCLASS(dispatchtarget)) return false;
+
+            if (current && current->klass &&
+                optimize_classisderivedfrom(current->klass, MORPHO_GETCLASS(dispatchtarget))) return false;
+        }
+
         value method;
         indx newkindx;
-        if (morpho_lookupmethod(type, label, &method) &&
+        if (morpho_lookupmethod(dispatchtarget, label, &method) &&
             optimize_addconstant(opt, method, &newkindx)) {
             
             // Replace invoke with an equivalent sequence of instructions

@@ -17,7 +17,9 @@ void globalinfo_init(glblinfo *info) {
     info->nread=0;
     info->nstore=0;
     varray_valueinit(&info->typeassignments);
+    info->typeassignmentinfo=REGTYPE_UNKNOWN;
     info->type=MORPHO_NIL;
+    info->typeinfo=REGTYPE_UNKNOWN;
 }
 
 void globalinfo_clear(glblinfo *info) {
@@ -69,12 +71,27 @@ bool globalinfolist_isconstant(globalinfolist *glist, int gindx, value *konst) {
     return false;
 }
 
+static regtypeinfo _globalinfo_mergetypeinfo(regtypeinfo current, regtypeinfo incoming) {
+    if (current==REGTYPE_UNKNOWN || incoming==REGTYPE_UNKNOWN) return REGTYPE_UNKNOWN;
+    if (current==REGTYPE_EXACT && incoming==REGTYPE_EXACT) return REGTYPE_EXACT;
+    return REGTYPE_SUBTYPE;
+}
+
 /** Sets a possible type assignment to a global */
-void globalinfolist_settype(globalinfolist *glist, int gindx, value type) {
-    varray_value *assignments = &glist->list[gindx].typeassignments;
-    
-    for (int i=0; i<assignments->count; i++) if (MORPHO_ISEQUAL(assignments->data[i], type)) return;
-    
+void globalinfolist_settype(globalinfolist *glist, int gindx, value type, regtypeinfo info) {
+    glblinfo *ginfo = &glist->list[gindx];
+    varray_value *assignments = &ginfo->typeassignments;
+
+    for (int i=0; i<assignments->count; i++) {
+        if (MORPHO_ISEQUAL(assignments->data[i], type)) {
+            ginfo->typeassignmentinfo = _globalinfo_mergetypeinfo(ginfo->typeassignmentinfo, info);
+            return;
+        }
+    }
+
+    if (assignments->count==0) ginfo->typeassignmentinfo = info;
+    else ginfo->typeassignmentinfo = REGTYPE_UNKNOWN;
+
     varray_valuewrite(assignments, type);
 }
 
@@ -83,12 +100,23 @@ value globalinfolist_type(globalinfolist *glist, int gindx) {
     return glist->list[gindx].type;
 }
 
+/** Gets the precision of a global's type */
+regtypeinfo globalinfolist_typeinfo(globalinfolist *glist, int gindx) {
+    return glist->list[gindx].typeinfo;
+}
+
 /** Gets the type of a global */
 void globalinfolist_computetype(globalinfolist *glist, int gindx) {
-    varray_value *assignments = &glist->list[gindx].typeassignments;
-    
-    if (assignments->count>1 || assignments->count==0) glist->list[gindx].type=MORPHO_NIL;
-    else glist->list[gindx].type=assignments->data[0];
+    glblinfo *ginfo = &glist->list[gindx];
+    varray_value *assignments = &ginfo->typeassignments;
+
+    if (assignments->count>1 || assignments->count==0) {
+        ginfo->type=MORPHO_NIL;
+        ginfo->typeinfo=REGTYPE_UNKNOWN;
+    } else {
+        ginfo->type=assignments->data[0];
+        ginfo->typeinfo=ginfo->typeassignmentinfo;
+    }
 }
 
 /** Adds a store instruction to a global */
@@ -120,6 +148,7 @@ void globalinfolist_startpass(globalinfolist *glist) {
         glist->list[i].nread=0;
         glist->list[i].nstore=0;
         glist->list[i].typeassignments.count=0; // Clear assignments from previous pass
+        glist->list[i].typeassignmentinfo=REGTYPE_UNKNOWN;
     }
 }
 
@@ -141,7 +170,12 @@ void globalinfolist_show(globalinfolist *glist) {
         printf("r: %i w: %i ", glist->list[i].nread, glist->list[i].nstore);
         
         value type = globalinfolist_type(glist, i);
-        if (!MORPHO_ISNIL(type)) morpho_printvalue(NULL, type);
+        regtypeinfo typeinfo = globalinfolist_typeinfo(glist, i);
+        if (!MORPHO_ISNIL(type)) {
+            if (typeinfo==REGTYPE_SUBTYPE) printf("<:");
+            else if (typeinfo==REGTYPE_EXACT) printf("=");
+            morpho_printvalue(NULL, type);
+        }
         printf("\n");
     }
 }
