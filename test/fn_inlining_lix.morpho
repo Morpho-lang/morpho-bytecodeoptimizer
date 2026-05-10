@@ -16,5 +16,5 @@ fn last(List a) {
     print first(a) // expect: 1
     print last(a)  // expect: 3
 
-    //var c,d,e,f,g
+    var c,d,e,f,g
 }

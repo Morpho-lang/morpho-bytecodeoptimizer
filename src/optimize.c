@@ -475,6 +475,17 @@ bool optimize_isused(optimizer *opt, registerindx rindx) {
     return optimize_checkdestusage(opt, opt->currentblk, rindx);
 }
 
+bool optimize_highestused(optimizer *opt, registerindx *out) {
+    objectfunction *func = optimize_currentblock(opt)->func;
+    for (registerindx r=func->nregs; r>0; r--) {
+        if (optimize_isused(opt, r-1)) {
+            *out=r-1;
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Trace back through aliases to find an original register. */
 registerindx optimize_findoriginalregister(optimizer *opt, registerindx rindx) {
     registerindx out=rindx, next;
@@ -1513,6 +1524,14 @@ void optimize_signature(optimizer *opt) {
         if (signature_getparamtype(&func->sig, i, &type)) {
             reginfolist_settypeinfo(&opt->rlist, i+1, type, REGTYPE_SUBTYPE);
         }
+    }
+
+    /* Optional parameters are initialized before function entry, but we model
+       them conservatively as unknown values for now. */
+    for (registerindx i=0; i<func->nopt; i++) {
+        registerindx r = func->nargs + 1 + i;
+        reginfolist_write(&opt->rlist, func->entry, r, REG_VALUE, 0);
+        opt->rlist.rinfo[r].iindx=INSTRUCTIONINDX_EMPTY;
     }
 }
 

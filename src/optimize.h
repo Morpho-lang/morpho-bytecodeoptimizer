@@ -126,6 +126,7 @@ globalinfolist *optimize_globalinfolist(optimizer *opt);
 void optimize_disassemble(optimizer *opt);
 
 bool optimize_isused(optimizer *opt, registerindx rindx);
+bool optimize_highestused(optimizer *opt, registerindx *out);
 bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx rindx);
 bool optimize_blockisreachable(optimizer *opt, block *blk);
