@@ -84,6 +84,7 @@ regtypeinfo optimize_typeprecision(value type);
 value optimize_type(optimizer *opt, registerindx r);
 regtypeinfo optimize_typeinfo(optimizer *opt, registerindx r);
 bool optimize_typefromvalue(value val, value *type);
+bool optimize_classisleaf(objectclass *klass);
 bool optimize_classisderivedfrom(objectclass *klass, objectclass *base);
 bool optimize_recordcallsite(optimizer *opt, objectfunction *func, registerindx argstart, int nargs, registerindx selfreg);
 void optimize_markrecursive(optimizer *opt, objectfunction *func);

@@ -174,7 +174,7 @@ void optimize_setexacttype(optimizer *opt, registerindx r, value type) {
 /** Infer the strongest safe precision for a type fact. */
 regtypeinfo optimize_typeprecision(value type) {
     if (!MORPHO_ISCLASS(type)) return REGTYPE_UNKNOWN;
-    return (MORPHO_GETCLASS(type)->children.count==0) ? REGTYPE_EXACT : REGTYPE_SUBTYPE;
+    return optimize_classisleaf(MORPHO_GETCLASS(type)) ? REGTYPE_EXACT : REGTYPE_SUBTYPE;
 }
 
 /** Callback function to get the type of a register */
@@ -317,6 +317,10 @@ static bool _optimize_recordcallarg(optimizer *opt, functioninputinfo *info, reg
     return _optimize_setfunctioninputfact(opt, info, dest, &incoming);
 }
 
+bool optimize_classisleaf(objectclass *klass) {
+    return (klass && klass->children.count==0);
+}
+
 bool optimize_classisderivedfrom(objectclass *klass, objectclass *base) {
     if (!klass || !base) return false;
     if (klass==base) return true;
@@ -421,7 +425,7 @@ bool optimize_hasuniquetype(optimizer *opt, registerindx r) {
     if (info==REGTYPE_EXACT) return !MORPHO_ISNIL(type);
     if (info!=REGTYPE_SUBTYPE || !MORPHO_ISCLASS(type)) return false;
 
-    return (MORPHO_GETCLASS(type)->children.count==0);
+    return optimize_classisleaf(MORPHO_GETCLASS(type));
 }
 
 /** Checks if a register has an exact type fact. */
@@ -1497,7 +1501,7 @@ void optimize_signature(optimizer *opt) {
 
     if (func->klass) {
         reginfolist_settypeinfo(&opt->rlist, 0, MORPHO_OBJECT(func->klass),
-                                (func->klass->children.count==0) ? REGTYPE_EXACT : REGTYPE_SUBTYPE);
+                                optimize_classisleaf(func->klass) ? REGTYPE_EXACT : REGTYPE_SUBTYPE);
     } else {
         reginfolist_settypeinfo(&opt->rlist, 0, typecallable, REGTYPE_SUBTYPE);
     }

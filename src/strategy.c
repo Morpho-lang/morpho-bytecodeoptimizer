@@ -681,7 +681,10 @@ bool strategy_method_resolution(optimizer *opt) {
             if (!MORPHO_ISCLASS(dispatchtarget)) return false;
 
             if (current && current->klass &&
-                optimize_classisderivedfrom(current->klass, MORPHO_GETCLASS(dispatchtarget))) return false;
+                optimize_classisderivedfrom(current->klass, MORPHO_GETCLASS(dispatchtarget))) {
+                objectclass *dispatchklass = MORPHO_GETCLASS(dispatchtarget);
+                if (!(dispatchklass==current->klass && optimize_classisleaf(dispatchklass))) return false;
+            }
         }
 
         value method;
