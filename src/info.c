@@ -226,6 +226,8 @@ int classinfolist_countconstructed(classinfolist *clist, objectclass *klass) {
 /** Initializes function metadata. */
 static void functioninfo_init(functioninfo *info) {
     info->nowners=0;
+    info->nblocks=0;
+    info->ninstructions=0;
     info->flags=FUNCTIONINFO_NONE;
 }
 
@@ -292,6 +294,36 @@ bool functioninfolist_incrementowners(functioninfolist *flist, objectfunction *f
 int functioninfolist_countowners(functioninfolist *flist, objectfunction *function) {
     functioninfo *info = functioninfolist_get(flist, function);
     return info ? info->nowners : 0;
+}
+
+/** Resets per-pass derived metadata for all functions. */
+void functioninfolist_startpass(functioninfolist *flist) {
+    for (int i=0; i<flist->list.count; i++) {
+        flist->list.data[i].info.nblocks=0;
+        flist->list.data[i].info.ninstructions=0;
+    }
+}
+
+/** Adds a block and its instruction count to a function record. */
+bool functioninfolist_addblock(functioninfolist *flist, objectfunction *function, int ninstructions) {
+    functioninfo *info = functioninfolist_getoradd(flist, function);
+    if (!info) return false;
+
+    info->nblocks++;
+    info->ninstructions += ninstructions;
+    return true;
+}
+
+/** Returns the number of reachable blocks associated with a function. */
+int functioninfolist_countblocks(functioninfolist *flist, objectfunction *function) {
+    functioninfo *info = functioninfolist_get(flist, function);
+    return info ? info->nblocks : 0;
+}
+
+/** Returns the number of reachable instructions associated with a function. */
+int functioninfolist_countinstructions(functioninfolist *flist, objectfunction *function) {
+    functioninfo *info = functioninfolist_get(flist, function);
+    return info ? info->ninstructions : 0;
 }
 
 /** Sets metadata flags on a function record. */

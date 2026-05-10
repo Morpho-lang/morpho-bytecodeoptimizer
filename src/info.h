@@ -87,6 +87,8 @@ typedef enum {
 
 typedef struct {
     int nowners;
+    int nblocks;
+    int ninstructions;
     unsigned int flags;
 } functioninfo;
 
@@ -107,6 +109,11 @@ void functioninfolist_clear(functioninfolist *flist);
 
 bool functioninfolist_incrementowners(functioninfolist *flist, objectfunction *function);
 int functioninfolist_countowners(functioninfolist *flist, objectfunction *function);
+
+void functioninfolist_startpass(functioninfolist *flist);
+bool functioninfolist_addblock(functioninfolist *flist, objectfunction *function, int ninstructions);
+int functioninfolist_countblocks(functioninfolist *flist, objectfunction *function);
+int functioninfolist_countinstructions(functioninfolist *flist, objectfunction *function);
 
 bool functioninfolist_setflags(functioninfolist *flist, objectfunction *function, unsigned int flags);
 bool functioninfolist_hasflags(functioninfolist *flist, objectfunction *function, unsigned int flags);

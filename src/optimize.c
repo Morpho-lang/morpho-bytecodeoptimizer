@@ -1594,6 +1594,20 @@ typedef struct {
 } prepass;
 
 /* -------------------------------------
+ * Function structure metadata
+ * ------------------------------------- */
+
+/** Initializes per-pass function structure metadata. */
+void optimize_functionstructure_init(optimizer *opt) {
+    functioninfolist_startpass(&opt->functioninfo);
+}
+
+/** Records reachable blocks and instruction counts for each function. */
+void optimize_functionstructure_visitblock(optimizer *opt, block *blk) {
+    functioninfolist_addblock(&opt->functioninfo, blk->func, (int) (blk->end - blk->start + 1));
+}
+
+/* -------------------------------------
  * Interprocedural inputs
  * ------------------------------------- */
 
@@ -1762,6 +1776,7 @@ void optimize_loopcandidates_finalize(optimizer *opt) {
  * ------------------------------------- */
 
 prepass prepasses[] = {
+    { optimize_functionstructure_init, optimize_functionstructure_visitblock, NULL, NULL },
     { optimize_functioninputs_init, NULL, NULL, NULL },
     { optimize_globalusage_init, NULL, globalusagevisitors, NULL },
     { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, optimize_loopcandidates_finalize },

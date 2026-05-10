@@ -1,0 +1,14 @@
+// Demonstrate function inlining
+
+import bytecodeoptimizer
+
+fn add(x, y) {
+    return x + y
+}
+
+var k = 0
+for (i in 1..5) {
+    k+=add(i, 2*i)
+}
+
+print k // expect: 45
