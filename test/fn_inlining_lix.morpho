@@ -1,0 +1,20 @@
+
+// Demonstrate function inlining with lix 
+
+import bytecodeoptimizer
+
+fn first(a) {
+    return a[0]
+}
+
+fn last(List a) {
+    return a[-1]
+}
+
+{
+    var a = [1, 2, 3]
+    print first(a) // expect: 1
+    print last(a)  // expect: 3
+
+    //var c,d,e,f,g
+}
