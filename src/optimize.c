@@ -1494,23 +1494,25 @@ void optimize_dead_store_elimination(optimizer *opt, block *blk) {
     
     for (int i=0; i<opt->rlist.nreg; i++) {
         instructionindx src;
+        instruction instr;
+
+        if (!block_writes(blk, i) ||                     // Skip registers never written in this block
+            optimize_isempty(opt, i) ||                  // Does the register contain something?
+            reginfolist_countuses(&opt->rlist, i)!=0 ||  // Is it being used in the block?
+            _ispreservedentryregister(blk->func, i) ||   // It's not a preserved entry slot
+            !reginfolist_source(&opt->rlist, i, &src) || // Identify the instruction that wrote it
+            !block_contains(blk, src)) continue;         // Ensure instruction is in this block
+
+        instr = optimize_getinstructionat(opt, src);
+        if (!optimize_candeletedeadstore(opt, instr, i) || // Check side effects before costly CFG walk
+            optimize_checkdestusage(opt, blk, i)) continue; // Is it being used elsewhere?
+            
+        bool deleted = optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
         
-        if (!optimize_isempty(opt, i) &&                // Does the register contain something?
-            reginfolist_countuses(&opt->rlist, i)==0 && // Is it being used in the block?
-            !_ispreservedentryregister(blk->func, i) && // It's not a preserved entry slot
-            !optimize_checkdestusage(opt, blk, i) &&    // Is it being used elsewhere?
-            reginfolist_source(&opt->rlist, i, &src) && // Identify the instruction that wrote it
-            block_contains(blk, src)) { // Ensure instruction is in this block
-            instruction instr = optimize_getinstructionat(opt, src);
-            if (!optimize_candeletedeadstore(opt, instr, i)) continue;
-            
-            bool deleted = optimize_deleteinstruction(opt, src); // Deletes the instruction, checking for side effects
-            
-            if (deleted && opt->verbose) {
-                printf("Deleted instruction: ");
-                debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
-                printf("\n");
-            }
+        if (deleted && opt->verbose) {
+            printf("Deleted instruction: ");
+            debugger_disassembleinstruction(NULL, instr, src, NULL, NULL);
+            printf("\n");
         }
     }
 }
