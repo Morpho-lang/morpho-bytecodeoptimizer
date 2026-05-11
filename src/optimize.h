@@ -41,6 +41,7 @@ typedef struct {
     varray_functioninputinfo functioninputs; /** Inferred call-site inputs for functions */
     dictionary functioninputindx; /** Map functions to functioninputs indices */
     dictionary requirednregs; /** Requested register counts for subsequent passes */
+    dictionary processedlabels; /** Labels whose method escapes were already processed this pass */
     
     int pass; /** Count passes */
     

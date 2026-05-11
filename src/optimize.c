@@ -37,6 +37,7 @@ void optimizer_init(optimizer *opt, program *prog) {
     varray_functioninputinfoinit(&opt->functioninputs);
     dictionary_init(&opt->functioninputindx);
     dictionary_init(&opt->requirednregs);
+    dictionary_init(&opt->processedlabels);
     varray_instructioninit(&opt->insertions);
     
     opt->v=morpho_newvm();
@@ -71,6 +72,7 @@ void optimize_clear(optimizer *opt) {
     varray_functioninputinfoclear(&opt->functioninputs);
     dictionary_clear(&opt->functioninputindx);
     dictionary_clear(&opt->requirednregs);
+    dictionary_clear(&opt->processedlabels);
     varray_instructionclear(&opt->insertions);
     
     if (opt->v) morpho_freevm(opt->v);
@@ -296,8 +298,15 @@ void optimize_markinitmethoduse(optimizer *opt, objectfunction *func) {
     } else opt->ipachanged=true;
 }
 
+static void optimize_clearprocessedlabels(optimizer *opt) {
+    dictionary_clear(&opt->processedlabels);
+    dictionary_init(&opt->processedlabels);
+}
+
 void optimize_markmethodsforlabelescaped(optimizer *opt, value label) {
     if (!MORPHO_ISSTRING(label)) return;
+    if (dictionary_get(&opt->processedlabels, label, NULL)) return;
+    dictionary_insert(&opt->processedlabels, label, MORPHO_NIL);
 
     if (strcmp(MORPHO_GETCSTRING(label), "invoke")==0) {
         for (unsigned int i=0; i<opt->prog->classes.count; i++) {
@@ -1843,6 +1852,15 @@ void optimize_functioninputs_init(optimizer *opt) {
 }
 
 /* -------------------------------------
+ * Processed labels
+ * ------------------------------------- */
+
+/** Clears memoized property labels before each analysis pass. */
+void optimize_processedlabels_init(optimizer *opt) {
+    optimize_clearprocessedlabels(opt);
+}
+
+/* -------------------------------------
  * Global usage
  * ------------------------------------- */
 
@@ -2004,6 +2022,7 @@ void optimize_loopcandidates_finalize(optimizer *opt) {
 prepass prepasses[] = {
     { optimize_functionstructure_init, optimize_functionstructure_visitblock, NULL, NULL },
     { optimize_functioninputs_init, NULL, NULL, NULL },
+    { optimize_processedlabels_init, NULL, NULL, NULL },
     { optimize_globalusage_init, NULL, globalusagevisitors, NULL },
     { optimize_loopcandidates_init, optimize_loopcandidates_visitblock, NULL, optimize_loopcandidates_finalize },
     { NULL, NULL, NULL, NULL }
@@ -2362,10 +2381,10 @@ static bool optimize_applyrequirednregs(optimizer *opt) {
 
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
+    opt->pass=n;
     optimize_runprepasses(opt);
     optimize_dataflow(opt);
     
-    opt->pass=n;
     if (opt->verbose) printf("===Optimization pass %i===\n", n);
     for (int i=0; i<opt->graph.count && !optimize_checkerror(opt); i++) {
         block *blk = &opt->graph.data[i];
