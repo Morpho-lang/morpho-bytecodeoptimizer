@@ -11,10 +11,15 @@ fn last(List a) {
     return a[-1]
 }
 
-{
-    var a = [1, 2, 3]
-    print first(a) // expect: 1
-    print last(a)  // expect: 3
+fn extract(List a, b) {
+    return a[b]
+}
 
-    var c,d,e,f,g
+{
+    var a = [1, 2]
+    print first(a) // expect: 1
+    print last(a)  // expect: 2
+    //print extract(a, 1) // expect: 2
+
+    //var c,d,e,f,g
 }

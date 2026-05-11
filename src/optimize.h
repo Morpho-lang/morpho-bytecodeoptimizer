@@ -40,6 +40,7 @@ typedef struct {
     functioninfolist functioninfo; /** Store per-function metadata */
     varray_functioninputinfo functioninputs; /** Inferred call-site inputs for functions */
     dictionary functioninputindx; /** Map functions to functioninputs indices */
+    dictionary requirednregs; /** Requested register counts for subsequent passes */
     
     int pass; /** Count passes */
     
@@ -100,6 +101,9 @@ bool optimize_contents(optimizer *opt, registerindx i, regcontents *contents, in
 bool optimize_hasuniquetype(optimizer *opt, registerindx r);
 bool optimize_hasexacttype(optimizer *opt, registerindx r);
 void optimize_markescaped(optimizer *opt, objectfunction *func);
+void optimize_markinitconstructoruse(optimizer *opt, objectfunction *func);
+void optimize_markinitmethoduse(optimizer *opt, objectfunction *func);
+void optimize_markmethodsforlabelescaped(optimizer *opt, value label);
 
 bool optimize_isoverwritten(optimizer *opt, registerindx i, instructionindx start);
 
@@ -118,6 +122,7 @@ void optimize_replaceinstruction(optimizer *opt, instruction instr);
 void optimize_replaceinstructionat(optimizer *opt, instructionindx i, instruction instr);
 bool optimize_replacewithloadconstant(optimizer *opt, registerindx r, value konst);
 void optimize_insertinstructions(optimizer *opt, int n, instruction *instr);
+void optimize_insertinstructionswithrestart(optimizer *opt, int n, instruction *instr, bool restart);
 
 bool optimize_deleteinstruction(optimizer *opt, instructionindx indx);
 
@@ -127,6 +132,7 @@ void optimize_disassemble(optimizer *opt);
 
 bool optimize_isused(optimizer *opt, registerindx rindx);
 bool optimize_highestused(optimizer *opt, registerindx *out);
+bool optimize_requirenregs(optimizer *opt, objectfunction *func, int nregs);
 bool optimize_checkdestusage(optimizer *opt, block *blk, registerindx rindx);
 bool optimize_candeletedeadstore(optimizer *opt, instruction instr, registerindx rindx);
 bool optimize_blockisreachable(optimizer *opt, block *blk);

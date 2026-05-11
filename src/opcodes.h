@@ -30,6 +30,7 @@ typedef unsigned int opcodeflags;
 #define OPCODE_PROPAGATE        (1<<14)
 
 #define OP_INSERT           (OP_END+1)
+#define OP_INSERT_RESTART   (OP_END+2)
 
 /* **********************************************************************
  * Interface

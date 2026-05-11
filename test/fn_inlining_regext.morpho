@@ -1,0 +1,25 @@
+import bytecodeoptimizer
+
+fn swap(a, i, j) {
+    var t = a[i]
+    a[i] = a[j]
+    a[j] = t
+}
+
+fn test(n) {
+    var a = [1, 2, 3]
+    var b = a.clone()
+
+    if (n > 0) {
+        swap(a, 0, 1)
+    }
+
+    print a[0]
+    print b[0]
+}
+
+{
+    test(1)
+
+    var c, d, e, f, g
+}

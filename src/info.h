@@ -82,7 +82,9 @@ typedef enum {
     FUNCTIONINFO_NONE              = 0x0,
     FUNCTIONINFO_USESELF_DISPATCH  = 0x1,
     FUNCTIONINFO_RECURSIVE         = 0x2,
-    FUNCTIONINFO_ESCAPES           = 0x4
+    FUNCTIONINFO_ESCAPES           = 0x4,
+    FUNCTIONINFO_INIT_CONSTRUCTED  = 0x8,
+    FUNCTIONINFO_INIT_METHOD       = 0x10
 } functioninfoflags;
 
 typedef struct {

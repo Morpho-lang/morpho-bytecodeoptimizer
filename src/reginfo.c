@@ -49,6 +49,26 @@ void reginfolist_wipe(reginfolist *rlist, int nreg) {
     for (int i=0; i<nreg; i++) reginfo_init(&rlist->rinfo[i]);
 }
 
+/** Resizes a reginfo list preserving existing facts. */
+bool reginfolist_resize(reginfolist *rlist, int nreg) {
+    if (nreg<=rlist->nreg) {
+        rlist->nreg=nreg;
+        return true;
+    }
+
+    reginfo *newinfo = MORPHO_MALLOC(sizeof(reginfo)*nreg);
+    if (!newinfo) return false;
+
+    for (int i=0; i<rlist->nreg; i++) newinfo[i]=rlist->rinfo[i];
+    for (int i=rlist->nreg; i<nreg; i++) reginfo_init(&newinfo[i]);
+
+    if (rlist->rinfo) MORPHO_FREE(rlist->rinfo);
+    rlist->rinfo=newinfo;
+    rlist->nreg=nreg;
+
+    return true;
+}
+
 /** Copys a reginfo list */
 bool reginfolist_copy(reginfolist *src, reginfolist *dest) {
     if (src->nreg>dest->nreg) return false;

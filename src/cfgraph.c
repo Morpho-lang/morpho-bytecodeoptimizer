@@ -336,6 +336,9 @@ void cfgraphbuilder_push(cfgraphbuilder *bld, instructionindx start) {
     // Ensure existing blocks are never processes twice
     if (dictionary_get(&bld->blkindx, MORPHO_INTEGER(start), NULL)) return;
     dictionary_insert(&bld->blkindx, MORPHO_INTEGER(start), MORPHO_NIL);
+    if (bld->verbose) printf("CFGBuild push start=%td fn=%s\n",
+                             start,
+                             (bld->currentfn && MORPHO_ISSTRING(bld->currentfn->name)) ? MORPHO_GETCSTRING(bld->currentfn->name) : "<fn>");
     
     varray_instructionindxadd(&bld->worklist, &start, 1);
 }
@@ -392,9 +395,10 @@ bool cfgraphbuilder_lookupblock(cfgraphbuilder *bld, instructionindx start, bloc
     return success;
 }
 
-/** Searches the block list for any block with an instruction indx **that lies within it** */
-bool cfgraphbuilder_findinblock(cfgraph *graph, instructionindx indx, block **blk) {
+/** Searches the block list for any block in a given function with an instruction indx **that lies within it** */
+bool cfgraphbuilder_findinblock(cfgraph *graph, objectfunction *func, instructionindx indx, block **blk) {
     for (blockindx i=0; i<graph->count; i++) {
+        if (graph->data[i].func!=func) continue;
         if (indx>=graph->data[i].start &&
             indx<=graph->data[i].end) {
             if (blk) *blk = graph->data+i;
@@ -429,6 +433,11 @@ bool cfgraphbuilder_popcomponent(cfgraphbuilder *bld, value *cmp) {
 /** Splits a block at instruction 'split' */
 void cfgraphbuilder_split(cfgraphbuilder *bld, block *blk, instructionindx split) {
     if (blk->start==split) return; // No need to split
+    if (bld->verbose) printf("CFGBuild split block [%td, %td] at %td fn=%s\n",
+                             blk->start,
+                             blk->end,
+                             split,
+                             (blk->func && MORPHO_ISSTRING(blk->func->name)) ? MORPHO_GETCSTRING(blk->func->name) : "<fn>");
     
     blk->end=split-1; // Update the end of this block
     cfgraphbuilder_push(bld, split);
@@ -440,9 +449,18 @@ void cfgraphbuilder_branchto(cfgraphbuilder *bld, instructionindx start) {
     block *old;
     
     if (cfgraphbuilder_lookupblock(bld, start, &old) ||
-        cfgraphbuilder_findinblock(bld->out, start, &old)) {
+        cfgraphbuilder_findinblock(bld->out, bld->currentfn, start, &old)) {
+        if (bld->verbose) printf("CFGBuild[v2 scoped] branchto existing start=%td within [%td, %td] current=%s existing=%s\n",
+                                 start,
+                                 old->start,
+                                 old->end,
+                                 (bld->currentfn && MORPHO_ISSTRING(bld->currentfn->name)) ? MORPHO_GETCSTRING(bld->currentfn->name) : "<fn>",
+                                 (old->func && MORPHO_ISSTRING(old->func->name)) ? MORPHO_GETCSTRING(old->func->name) : "<fn>");
         cfgraphbuilder_split(bld, old, start);
     } else {
+        if (bld->verbose) printf("CFGBuild[v2 scoped] branchto new start=%td fn=%s\n",
+                                 start,
+                                 (bld->currentfn && MORPHO_ISSTRING(bld->currentfn->name)) ? MORPHO_GETCSTRING(bld->currentfn->name) : "<fn>");
         cfgraphbuilder_push(bld, start);
     }
 }
@@ -469,6 +487,9 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     objectfunction *fn = cfgraphbuilder_currentfn(bld);
     block_init(&blk, fn, start);
     blk.isentry=(fn->entry==start);
+    if (bld->verbose) printf("CFGBuild begin block start=%td fn=%s\n",
+                             start,
+                             (fn && MORPHO_ISSTRING(fn->name)) ? MORPHO_GETCSTRING(fn->name) : "<fn>");
     
     instructionindx i;
     for (i=start; i<cfgraphbuilder_countinstructions(bld); i++) {
@@ -498,6 +519,10 @@ void cfgraphbuilder_buildblock(cfgraphbuilder *bld, instructionindx start) {
     }
         
     blk.end=i; // Record end point
+    if (bld->verbose) printf("CFGBuild finalize block [%td, %td] fn=%s\n",
+                             blk.start,
+                             blk.end,
+                             (fn && MORPHO_ISSTRING(fn->name)) ? MORPHO_GETCSTRING(fn->name) : "<fn>");
         
     cfgraphbuilder_addblock(bld, &blk);
 }

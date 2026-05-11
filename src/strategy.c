@@ -527,8 +527,13 @@ static bool _strategy_inlineconstant(optimizer *opt, objectfunction *callee, ind
     return optimize_addconstant(opt, callee->konst.data[oldkindx], newkindx);
 }
 
-static bool _strategy_inlineregister(optimizer *opt, registerindx inlinebase, registerindx callee, registerindx *out) {
-    registerindx mapped = inlinebase + callee;
+static bool _strategy_inlineregister(optimizer *opt, registerindx rA, int nargs, registerindx inlinebase, registerindx callee, registerindx *out) {
+    registerindx mapped;
+
+    /* Reuse the caller's call frame directly for the callee receiver and
+       positional arguments. Only allocate fresh registers for callee locals. */
+    if (callee<=(registerindx) nargs) mapped = rA + callee;
+    else mapped = inlinebase + (callee - nargs - 1);
 
     if (mapped>=optimize_currentblock(opt)->func->nregs) return false;
 
@@ -539,15 +544,22 @@ static bool _strategy_inlineregister(optimizer *opt, registerindx inlinebase, re
 static bool _strategy_inlinebase(optimizer *opt, registerindx rA, int nargs, objectfunction *callee, registerindx *out) {
     objectfunction *caller = optimize_currentblock(opt)->func;
     registerindx highest = rA + nargs, used;
+    int required;
+    int nextra = callee->nregs - nargs - 1;
 
     if (optimize_highestused(opt, &used) && used>highest) highest=used;
-    if (highest + callee->nregs >= caller->nregs) return false;
+
+    required = (int) highest + ((nextra>0) ? nextra : 0) + 1;
+    if (required>caller->nregs) {
+        optimize_requirenregs(opt, caller, required);
+        return false;
+    }
 
     *out = highest + 1;
     return true;
 }
 
-static bool _strategy_inlineinstruction(optimizer *opt, objectfunction *callee, registerindx inlinebase, instruction instr, registerindx resultreg, bool *sawreturn, instruction *out) {
+static bool _strategy_inlineinstruction(optimizer *opt, objectfunction *callee, registerindx rA, int nargs, registerindx inlinebase, instruction instr, registerindx resultreg, bool *sawreturn, instruction *out) {
     instruction op = DECODE_OP(instr);
     opcodeflags flags = opcode_getflags(op);
     registerindx a = DECODE_A(instr), b = DECODE_B(instr), c = DECODE_C(instr);
@@ -557,16 +569,17 @@ static bool _strategy_inlineinstruction(optimizer *opt, objectfunction *callee, 
         case OP_RETURN:
             CHECK(sawreturn && !(*sawreturn));
             if (DECODE_A(instr)==0) {
-                *out = ENCODE_BYTE(OP_NOP);
+                CHECK(optimize_addconstant(opt, MORPHO_NIL, &kindx));
+                *out = ENCODE_LONG(OP_LCT, resultreg, (instruction) kindx);
             } else {
                 CHECK(DECODE_A(instr)==1);
-                CHECK(_strategy_inlineregister(opt, inlinebase, DECODE_B(instr), &b));
+                CHECK(_strategy_inlineregister(opt, rA, nargs, inlinebase, DECODE_B(instr), &b));
                 *out = ((b==resultreg) ? ENCODE_BYTE(OP_NOP) : ENCODE_DOUBLE(OP_MOV, resultreg, b));
             }
             *sawreturn = true;
             return true;
         case OP_LCT:
-            CHECK(_strategy_inlineregister(opt, inlinebase, a, &a));
+            CHECK(_strategy_inlineregister(opt, rA, nargs, inlinebase, a, &a));
             CHECK(_strategy_inlineconstant(opt, callee, DECODE_Bx(instr), &kindx));
             *out = ENCODE_LONG(OP_LCT, a, (instruction) kindx);
             return true;
@@ -578,9 +591,9 @@ static bool _strategy_inlineinstruction(optimizer *opt, objectfunction *callee, 
             CHECK((flags & ~(OPCODE_OVERWRITES_A | OPCODE_OVERWRITES_B | OPCODE_USES_A | OPCODE_USES_B | OPCODE_USES_C | OPCODE_USES_RANGEBC | OPCODE_NODELETE | OPCODE_PROPAGATE))==0);
             CHECK(!(flags & OPCODE_OVERWRITES_AP1));
 
-            if (flags & (OPCODE_OVERWRITES_A | OPCODE_USES_A)) CHECK(_strategy_inlineregister(opt, inlinebase, a, &a));
-            if (flags & (OPCODE_OVERWRITES_B | OPCODE_USES_B | OPCODE_USES_RANGEBC)) CHECK(_strategy_inlineregister(opt, inlinebase, b, &b));
-            if (flags & (OPCODE_USES_C | OPCODE_USES_RANGEBC)) CHECK(_strategy_inlineregister(opt, inlinebase, c, &c));
+            if (flags & (OPCODE_OVERWRITES_A | OPCODE_USES_A)) CHECK(_strategy_inlineregister(opt, rA, nargs, inlinebase, a, &a));
+            if (flags & (OPCODE_OVERWRITES_B | OPCODE_USES_B | OPCODE_USES_RANGEBC)) CHECK(_strategy_inlineregister(opt, rA, nargs, inlinebase, b, &b));
+            if (flags & (OPCODE_USES_C | OPCODE_USES_RANGEBC)) CHECK(_strategy_inlineregister(opt, rA, nargs, inlinebase, c, &c));
 
             *out = ENCODE(op, a, b, c);
             return true;
@@ -611,29 +624,28 @@ bool strategy_inline_function(optimizer *opt) {
         functioninfolist_countblocks(&opt->functioninfo, callee)!=1 ||
         functioninfolist_countinstructions(&opt->functioninfo, callee)>STRATEGY_INLINE_MAXINSTRUCTIONS ||
         !cfgraph_findblock(&opt->graph, callee->entry, &blk) ||
-        blk->func!=callee ||
-        !_strategy_inlinebase(opt, rA, nargs, callee, &inlinebase)) return false;
+        blk->func!=callee) return false;
+
+    for (instructionindx i=blk->start; i<=blk->end; i++) {
+        instruction op = DECODE_OP(optimize_getinstructionat(opt, i));
+        if (op==OP_END || op==OP_LUP || op==OP_SUP || op==OP_CLOSURE || op==OP_CLOSEUP) return false;
+    }
+
+    if (!_strategy_inlinebase(opt, rA, nargs, callee, &inlinebase)) return false;
 
     varray_instructioninit(&insert);
-
-    for (registerindx r=0; r<=nargs; r++) {
-        registerindx dest = inlinebase + r;
-        registerindx src = rA + r;
-
-        if (dest!=src) varray_instructionwrite(&insert, ENCODE_DOUBLE(OP_MOV, dest, src));
-    }
 
     for (instructionindx i=blk->start; i<=blk->end; i++) {
         instruction cinstr = optimize_getinstructionat(opt, i);
         instruction remapped;
 
-        if (!_strategy_inlineinstruction(opt, callee, inlinebase, cinstr, rA, &sawreturn, &remapped)) goto cleanup;
+        if (!_strategy_inlineinstruction(opt, callee, rA, nargs, inlinebase, cinstr, rA, &sawreturn, &remapped)) goto cleanup;
         varray_instructionwrite(&insert, remapped);
     }
 
     if (!sawreturn || insert.count==0) goto cleanup;
 
-    optimize_insertinstructions(opt, insert.count, insert.data);
+    optimize_insertinstructionswithrestart(opt, insert.count, insert.data, true);
     varray_instructionclear(&insert);
     return true;
 
@@ -949,7 +961,7 @@ optimizationstrategy strategies[] = {
     { OP_METHOD, strategy_metafunction_reduction,         0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },
-    { OP_SGL,  strategy_unused_global,                    1 },
+    //{ OP_SGL,  strategy_unused_global,                    1 },
     { OP_END,  NULL,                                      0 }
 };
 

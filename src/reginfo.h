@@ -65,6 +65,7 @@ typedef struct {
 void reginfolist_init(reginfolist *rlist, int nreg);
 void reginfolist_clear(reginfolist *rlist);
 void reginfolist_wipe(reginfolist *rlist, int nreg);
+bool reginfolist_resize(reginfolist *rlist, int nreg);
 bool reginfolist_copy(reginfolist *src, reginfolist *dest);
 bool reginfo_equal(reginfo *a, reginfo *b);
 bool reginfolist_equal(reginfolist *a, reginfolist *b);

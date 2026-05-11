@@ -176,6 +176,24 @@ static void _applyreturntypefact(optimizer *opt, registerindx r, value callable)
     optimize_settype(opt, r, type, info);
 }
 
+static void _markinitializerconstructoruse(optimizer *opt, value callable) {
+    objectstring initlabel = MORPHO_STATICSTRING("init");
+    value method;
+
+    if (!MORPHO_ISCLASS(callable)) return;
+    if (!morpho_lookupmethod(callable, MORPHO_OBJECT(&initlabel), &method)) return;
+
+    if (MORPHO_ISFUNCTION(method)) {
+        optimize_markinitconstructoruse(opt, MORPHO_GETFUNCTION(method));
+    } else if (MORPHO_ISMETAFUNCTION(method)) {
+        objectmetafunction *mfn = MORPHO_GETMETAFUNCTION(method);
+        for (int i=0; i<mfn->fns.count; i++) {
+            value fn = mfn->fns.data[i];
+            if (MORPHO_ISFUNCTION(fn)) optimize_markinitconstructoruse(opt, MORPHO_GETFUNCTION(fn));
+        }
+    }
+}
+
 static bool _metafunctionhasselfdispatch(optimizer *opt, objectmetafunction *mfn) {
     for (int i=0; i<mfn->fns.count; i++) {
         value fn = mfn->fns.data[i];
@@ -257,6 +275,7 @@ void call_trackingfn(optimizer *opt) {
         if (MORPHO_GETFUNCTION(content)==current) optimize_markrecursive(opt, current);
         optimize_recordcallsite(opt, MORPHO_GETFUNCTION(content), a+1, nargs, REGISTER_UNALLOCATED);
     } else {
+        _markinitializerconstructoruse(opt, content);
         returncallable = _trackreducedmetafunctioncall(opt, current, content, a+1, nargs, &freecallable);
     }
 
@@ -281,6 +300,7 @@ void invoke_trackingfn(optimizer *opt) {
         if (optimize_isconstant(opt, a, &kindx)) {
             method = optimize_getconstant(opt, kindx);
             if (MORPHO_ISFUNCTION(method)) {
+                optimize_markinitmethoduse(opt, MORPHO_GETFUNCTION(method));
                 optimize_recordcallsite(opt, MORPHO_GETFUNCTION(method), a+2, nargs, a+1);
             }
         }
@@ -311,6 +331,11 @@ void sup_trackingfn(optimizer *opt) {
 
 void lpr_trackingfn(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
+    indx cindx;
+
+    if (optimize_isconstant(opt, DECODE_C(instr), &cindx)) {
+        optimize_markmethodsforlabelescaped(opt, optimize_getconstant(opt, cindx));
+    }
     optimize_writevalue(opt, DECODE_A(instr));
 }
 
