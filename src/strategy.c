@@ -961,7 +961,7 @@ optimizationstrategy strategies[] = {
     { OP_METHOD, strategy_metafunction_reduction,         0 },
     
     { OP_LGL,  strategy_constant_global,                  1 },
-    //{ OP_SGL,  strategy_unused_global,                    1 },
+    { OP_SGL,  strategy_unused_global,                    1 },
     { OP_END,  NULL,                                      0 }
 };
 
