@@ -1,0 +1,26 @@
+
+
+// Demonstrate method inlining
+
+import bytecodeoptimizer
+
+class A {
+    init(x) {
+        self.x = x 
+    }
+
+    acc(y) {
+        self.x += y
+    }
+
+    get() {
+        return self.x
+    }
+}
+
+var a=A(0), k=0
+for (i in 1..5) {
+    a.acc(i)
+}
+
+print a.get() // expect: 15
