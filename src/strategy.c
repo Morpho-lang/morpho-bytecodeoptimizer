@@ -803,6 +803,35 @@ bool strategy_load_index_list(optimizer *opt) {
  * Method resolution
  * ------------------------------------- */
 
+static bool _strategy_subtreehasuniquemethod(objectclass *klass, value label, value expected) {
+    value candidate;
+
+    if (!morpho_lookupmethod(MORPHO_OBJECT(klass), label, &candidate)) return false;
+    if (!MORPHO_ISEQUAL(candidate, expected)) return false;
+
+    for (unsigned int i=0; i<klass->children.count; i++) {
+        value child = klass->children.data[i];
+        if (MORPHO_ISCLASS(child) &&
+            !_strategy_subtreehasuniquemethod(MORPHO_GETCLASS(child), label, expected)) return false;
+    }
+
+    return true;
+}
+
+static bool _strategy_lookupuniquemethod(optimizer *opt, registerindx receiver, value label, value *method) {
+    value type = optimize_type(opt, receiver);
+
+    if (!MORPHO_ISCLASS(type)) return false;
+    if (optimize_hasuniquetype(opt, receiver)) {
+        return morpho_lookupmethod(type, label, method);
+    }
+
+    if (optimize_typeinfo(opt, receiver)!=REGTYPE_SUBTYPE) return false;
+    if (!morpho_lookupmethod(type, label, method)) return false;
+
+    return _strategy_subtreehasuniquemethod(MORPHO_GETCLASS(type), label, *method);
+}
+
 bool strategy_method_resolution(optimizer *opt) {
     instruction instr = optimize_getinstruction(opt);
     bool success=false;
@@ -813,10 +842,10 @@ bool strategy_method_resolution(optimizer *opt) {
     indx kindx;
     
     if (MORPHO_ISCLASS(type) && // Return early if type information isn't present
-        optimize_isconstant(opt, DECODE_A(instr), &kindx) &&
-        optimize_hasuniquetype(opt, receiver)) {
+        optimize_isconstant(opt, DECODE_A(instr), &kindx)) {
         value label = optimize_getconstant(opt, kindx);
         value dispatchtarget = type;
+        value method = MORPHO_NIL;
         bool isclassreceiver = MORPHO_ISEQUAL(type, typeclass);
 
         if (isclassreceiver) {
@@ -831,12 +860,13 @@ bool strategy_method_resolution(optimizer *opt) {
                 objectclass *dispatchklass = MORPHO_GETCLASS(dispatchtarget);
                 if (!(dispatchklass==current->klass && optimize_classisleaf(dispatchklass))) return false;
             }
+            if (!morpho_lookupmethod(dispatchtarget, label, &method)) return false;
+        } else {
+            if (!_strategy_lookupuniquemethod(opt, receiver, label, &method)) return false;
         }
 
-        value method;
         indx newkindx;
-        if (morpho_lookupmethod(dispatchtarget, label, &method) &&
-            optimize_addconstant(opt, method, &newkindx)) {
+        if (optimize_addconstant(opt, method, &newkindx)) {
             
             // Replace invoke with an equivalent sequence of instructions
             instruction insert[] = {
