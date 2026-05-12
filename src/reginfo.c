@@ -4,6 +4,8 @@
  *  @brief Data structure to track register status
 */
 
+#include <limits.h>
+
 #include "morphocore.h"
 #include "reginfo.h"
 #include "cfgraph.h"
@@ -13,6 +15,7 @@ static void reginfo_clearsource(reginfo *info);
 static void reginfo_clearalias(reginfo *info);
 static void reginfo_generalize(reginfo *info);
 static void reginfo_normalize(reginfo *info);
+static bool reginfo_commonancestor(value a, value b, value *out);
 static void reginfo_jointype(reginfo *joined, reginfo *incoming);
 static void regusage_merge(regusage *dest, regusage src);
 static bool regusage_hasread(regusage usage);
@@ -133,8 +136,54 @@ static void reginfo_normalize(reginfo *info) {
     }
 }
 
+static bool reginfo_findinlinearization(objectclass *klass, objectclass *target, int *out) {
+    if (!klass || !target || !out) return false;
+
+    for (int i=0; i<klass->linearization.count; i++) {
+        if (MORPHO_ISCLASS(klass->linearization.data[i]) &&
+            MORPHO_GETCLASS(klass->linearization.data[i])==target) {
+            *out=i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool reginfo_commonancestor(value a, value b, value *out) {
+    if (!MORPHO_ISCLASS(a) || !MORPHO_ISCLASS(b) || !out) return false;
+
+    objectclass *aclass = MORPHO_GETCLASS(a);
+    objectclass *bclass = MORPHO_GETCLASS(b);
+    objectclass *best = NULL;
+    int bestscore = INT_MAX;
+    int bestdepth = INT_MAX;
+
+    for (int i=0; i<aclass->linearization.count; i++) {
+        value candidate = aclass->linearization.data[i];
+        int j;
+
+        if (!MORPHO_ISCLASS(candidate)) continue;
+        if (!reginfo_findinlinearization(bclass, MORPHO_GETCLASS(candidate), &j)) continue;
+
+        int score = ((i>j) ? i : j);
+        int depth = i+j;
+        if (!best || score<bestscore || (score==bestscore && depth<bestdepth)) {
+            best = MORPHO_GETCLASS(candidate);
+            bestscore = score;
+            bestdepth = depth;
+        }
+    }
+
+    if (!best) return false;
+    *out = MORPHO_OBJECT(best);
+    return true;
+}
+
 /** Joins type information while allowing subtype-compatible facts to survive. */
 static void reginfo_jointype(reginfo *joined, reginfo *incoming) {
+    value common;
+
     if (MORPHO_ISNIL(joined->type) || MORPHO_ISNIL(incoming->type)) {
         joined->type=MORPHO_NIL;
         joined->typeinfo=REGTYPE_UNKNOWN;
@@ -153,6 +202,12 @@ static void reginfo_jointype(reginfo *joined, reginfo *incoming) {
 
     if (value_typematch(incoming->type, joined->type)) {
         joined->type=incoming->type;
+        joined->typeinfo=REGTYPE_SUBTYPE;
+        return;
+    }
+
+    if (reginfo_commonancestor(joined->type, incoming->type, &common)) {
+        joined->type=common;
         joined->typeinfo=REGTYPE_SUBTYPE;
         return;
     }
