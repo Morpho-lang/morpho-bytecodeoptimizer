@@ -1,0 +1,14 @@
+// Demonstrate inlinable index method dispatch via lix
+
+import bytecodeoptimizer
+
+class Offset {
+    index(g, i) {
+        return g + i
+    }
+}
+
+var offset = Offset()
+print offset[0, 0] // expect: 0
+print offset[1, 2] // expect: 3
+print offset[2, 1] // expect: 3

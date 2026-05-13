@@ -1,0 +1,94 @@
+import bytecodeoptimizer
+// Exploratory repro for register remap around plotfield-like code paths.
+// The key patterns are:
+// - two-index loads inside nested loops
+// - selection && !selection[g, i] continue guard
+// - clamp/scale arithmetic on the loaded value
+// - nested method/constructor call in setcolumn
+// - an unrelated object kept live across the loop and used afterward
+
+class ColorMap {
+  rgb(x) { return [x, x+1, x+2] }
+}
+
+class Selection {
+  init() {}
+
+  index(g, i) {
+    if (g==0) return i!=1
+    else return i==1
+  }
+}
+
+class ScaleBar {
+  init(bias) { self.bias = bias }
+  draw(a, b) { return a+b+self.bias }
+}
+
+fn plotfield_remap_probe(field, selection, colormap, scalebar, cmin, cmax) {
+  var shape = [3, 3]
+  var cm = colormap
+  if (cm==nil) cm = ColorMap()
+
+  var bnd = [1, 6]
+  if (!isnil(cmin)) bnd[0] = cmin
+  if (!isnil(cmax)) bnd[1] = cmax
+
+  var sc = bnd[1]-bnd[0]
+  if (abs(sc)>1e-16) sc = 1/sc else sc = 1
+
+  var out = []
+
+  for (g in 0...shape.count()) {
+    if (shape[g]==0) continue
+
+    var nel = shape[g]
+    var cmat = Matrix(3, nel)
+
+    for (i in 0...nel) {
+      if (selection && !selection[g, i]) continue
+
+      var val = field[g, i]
+      if (!isnil(cmin)) val = max(cmin, val)
+      if (!isnil(cmax)) val = min(cmax, val)
+      val = (val-bnd[0])*sc
+
+      cmat.setcolumn(i, Matrix(cm.rgb(val)))
+    }
+
+    out.append(cmat)
+  }
+
+  if (isobject(scalebar)) {
+    out.append(scalebar.draw(bnd[0], bnd[1]))
+  }
+
+  return out
+}
+
+var field = Matrix(2, 3)
+field[0,0] = 1
+field[0,1] = 2
+field[0,2] = 3
+field[1,0] = 4
+field[1,1] = 5
+field[1,2] = 6
+
+var selection = Selection()
+var cm = ColorMap()
+var sb = ScaleBar(10)
+
+var out = plotfield_remap_probe(field, selection, cm, sb, 2, 5)
+
+print out[0]
+// expect: [ 0 0 0.333333 ]
+// expect: [ 1 0 1.33333 ]
+// expect: [ 2 0 2.33333 ]
+
+print out[1]
+// expect: [ 0 1 0 ]
+// expect: [ 0 2 0 ]
+// expect: [ 0 3 0 ]
+
+print out[2]
+// expect: 17

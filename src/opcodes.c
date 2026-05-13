@@ -177,11 +177,10 @@ static void _applyreturntypefact(optimizer *opt, registerindx r, value callable)
 }
 
 static void _markinitializerconstructoruse(optimizer *opt, value callable) {
-    objectstring initlabel = MORPHO_STATICSTRING("init");
     value method;
 
     if (!MORPHO_ISCLASS(callable)) return;
-    if (!morpho_lookupmethod(callable, MORPHO_OBJECT(&initlabel), &method)) return;
+    if (!morpho_lookupmethod(callable, initselector, &method)) return;
 
     if (MORPHO_ISFUNCTION(method)) {
         optimize_markinitconstructoruse(opt, MORPHO_GETFUNCTION(method));

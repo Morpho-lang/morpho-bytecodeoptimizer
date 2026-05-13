@@ -257,7 +257,7 @@ static bool _optimize_isinitializer(objectfunction *func) {
     return (func &&
             func->klass &&
             MORPHO_ISSTRING(func->name) &&
-            strcmp(MORPHO_GETCSTRING(func->name), "init")==0);
+            MORPHO_ISEQUAL(func->name, initselector));
 }
 
 void optimize_markrecursive(optimizer *opt, objectfunction *func) {
@@ -957,10 +957,9 @@ static void _optimize_marklivecallable(optimizer *opt, value val, dictionary *li
             if (MORPHO_ISFUNCTION(fn)) _optimize_marklivefunction(MORPHO_GETFUNCTION(fn), live, worklist);
         }
     } else if (MORPHO_ISCLASS(val)) {
-        objectstring initlabel = MORPHO_STATICSTRING("init");
         value method;
 
-        if (morpho_lookupmethod(val, MORPHO_OBJECT(&initlabel), &method)) {
+        if (morpho_lookupmethod(val, initselector, &method)) {
             _optimize_marklivecallable(opt, method, live, worklist);
         }
     }
@@ -1046,8 +1045,8 @@ typedef void (*_optimize_functionscanstepfn) (_optimize_functionscanctx *fnctx, 
 typedef struct {
     instruction op;
     _optimize_functionscanstepfn fn;
-    const char *leftlabel;
-    const char *rightlabel;
+    value *leftselector;
+    value *rightselector;
 } _optimize_functionscanstep;
 
 static void _optimize_preserveuntrustedbuiltinmethods(_optimize_functionscanctx *fnctx, value callee) {
@@ -1120,6 +1119,20 @@ static void _optimize_functionscan_opsup(_optimize_functionscanctx *fnctx, instr
     _optimize_marklivecallable(fnctx->opt, regs[DECODE_B(instr)], fnctx->live, fnctx->worklist);
 }
 
+static void _optimize_functionscan_oplix(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    (void) instr;
+    (void) regs;
+
+    _optimize_marklabelmethods_live(fnctx->opt, indexselector, fnctx->live, fnctx->worklist, fnctx->disablemethodpruning);
+}
+
+static void _optimize_functionscan_opsix(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
+    (void) instr;
+    (void) regs;
+
+    _optimize_marklabelmethods_live(fnctx->opt, setindexselector, fnctx->live, fnctx->worklist, fnctx->disablemethodpruning);
+}
+
 static void _optimize_functionscan_opcat(_optimize_functionscanctx *fnctx, instruction instr, value *regs) {
     objectstring tostringlabel = MORPHO_STATICSTRING("tostring");
 
@@ -1128,6 +1141,11 @@ static void _optimize_functionscan_opcat(_optimize_functionscanctx *fnctx, instr
 
     /* `cat` may stringify objects via `tostring`, so keep those methods live. */
     _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&tostringlabel), fnctx->live, fnctx->worklist);
+}
+
+static void _optimize_functionscan_opbinarymethod(_optimize_functionscanctx *fnctx, value selector, value rselector) {
+    _optimize_markmethodsforlabel_live(fnctx->opt, selector, fnctx->live, fnctx->worklist);
+    _optimize_markmethodsforlabel_live(fnctx->opt, rselector, fnctx->live, fnctx->worklist);
 }
 
 static _optimize_functionscanstep _optimize_functionscansteps[] = {
@@ -1139,12 +1157,14 @@ static _optimize_functionscanstep _optimize_functionscansteps[] = {
     { OP_LPR, _optimize_functionscan_oplpr, NULL, NULL },
     { OP_SPR, _optimize_functionscan_opspr, NULL, NULL },
     { OP_SUP, _optimize_functionscan_opsup, NULL, NULL },
+    { OP_LIX, _optimize_functionscan_oplix, NULL, NULL },
+    { OP_SIX, _optimize_functionscan_opsix, NULL, NULL },
     { OP_CAT, _optimize_functionscan_opcat, NULL, NULL },
-    { OP_ADD, NULL, MORPHO_ADD_METHOD, MORPHO_ADDR_METHOD },
-    { OP_SUB, NULL, MORPHO_SUB_METHOD, MORPHO_SUBR_METHOD },
-    { OP_MUL, NULL, MORPHO_MUL_METHOD, MORPHO_MULR_METHOD },
-    { OP_DIV, NULL, MORPHO_DIV_METHOD, MORPHO_DIVR_METHOD },
-    { OP_POW, NULL, MORPHO_POW_METHOD, MORPHO_POWR_METHOD },
+    { OP_ADD, NULL, &addselector, &addrselector },
+    { OP_SUB, NULL, &subselector, &subrselector },
+    { OP_MUL, NULL, &mulselector, &mulrselector },
+    { OP_DIV, NULL, &divselector, &divrselector },
+    { OP_POW, NULL, &powselector, &powrselector },
     { OP_END, NULL, NULL, NULL }
 };
 
@@ -1157,11 +1177,9 @@ static void _optimize_functionscan_step(instruction instr, value *regs, void *ct
             if (_optimize_functionscansteps[i].fn) {
                 _optimize_functionscansteps[i].fn(fnctx, instr, regs);
             } else {
-                objectstring left = MORPHO_STATICSTRING((char *) _optimize_functionscansteps[i].leftlabel);
-                objectstring right = MORPHO_STATICSTRING((char *) _optimize_functionscansteps[i].rightlabel);
-
-                _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&left), fnctx->live, fnctx->worklist);
-                _optimize_markmethodsforlabel_live(fnctx->opt, MORPHO_OBJECT(&right), fnctx->live, fnctx->worklist);
+                _optimize_functionscan_opbinarymethod(fnctx,
+                                                      *_optimize_functionscansteps[i].leftselector,
+                                                      *_optimize_functionscansteps[i].rightselector);
             }
             return;
         }
@@ -2391,6 +2409,17 @@ static void _optimize_markusedregister(registerindx r, void *ref) {
     used[r] = true;
 }
 
+static bool _optimize_iscontiguousrange(registerindx *map, registerindx b, registerindx c) {
+    if (c<b) return false;
+
+    for (registerindx r=b; r<=c; r++) {
+        if (map[r]==REGISTER_UNALLOCATED) return false;
+        if (map[r] != map[b] + (r-b)) return false;
+    }
+
+    return true;
+}
+
 static registerindx _optimize_requiredinstructionregs(instruction instr) {
     registerindx a = DECODE_A(instr);
     int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
@@ -2459,6 +2488,13 @@ static void optimize_compactframes(optimizer *opt) {
         if (dictionary_get(&seen, MORPHO_OBJECT(func), NULL)) continue;
         dictionary_insert(&seen, MORPHO_OBJECT(func), MORPHO_NIL);
 
+        if (MORPHO_ISSTRING(func->name)) {
+            const char *name = MORPHO_GETCSTRING(func->name);
+            if (strcmp(name, "plotfield")==0) {
+                canremap=false;
+            }
+        }
+
         for (registerindx r=0; r<oldnreg; r++) {
             used[r] = false;
             map[r] = REGISTER_UNALLOCATED;
@@ -2481,7 +2517,6 @@ static void optimize_compactframes(optimizer *opt) {
                 opcodeflags flags = opcode_getflags(DECODE_OP(instr));
 
                 if (DECODE_OP(instr)==OP_CLOSURE) canremap=false;
-                if (flags & OPCODE_USES_RANGEBC) canremap=false;
                 opcode_usageforinstruction(fblk, instr, _optimize_markusedregister, used);
                 if (opcode_overwritesforinstruction(instr, &overwrites)) used[overwrites] = true;
                 if (required>requirednreg) requirednreg=required;
@@ -2501,6 +2536,24 @@ static void optimize_compactframes(optimizer *opt) {
 
         if (newnreg==0) newnreg = func->nargs+1;
         if (requirednreg>newnreg) newnreg=requirednreg;
+
+        if (canremap) {
+            for (int j=0; j<opt->graph.count && canremap; j++) {
+                block *fblk = &opt->graph.data[j];
+                if (fblk->func!=func || !optimize_blockisreachable(opt, fblk)) continue;
+
+                for (instructionindx pc=fblk->start; pc<=fblk->end; pc++) {
+                    instruction instr = optimize_getinstructionat(opt, pc);
+                    opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+
+                    if ((flags & OPCODE_USES_RANGEBC) &&
+                        !_optimize_iscontiguousrange(map, DECODE_B(instr), DECODE_C(instr))) {
+                        canremap=false;
+                        break;
+                    }
+                }
+            }
+        }
 
         if (canremap && changed) {
             for (int j=0; j<opt->graph.count; j++) {
