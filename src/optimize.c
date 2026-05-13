@@ -836,7 +836,7 @@ static void _optimize_ipascanfunction(_optimize_ipascanstate *state) {
 
     for (blockindx b=0; b<opt->graph.count; b++) {
         block *blk = &opt->graph.data[b];
-        if (blk->func!=func) continue;
+        if (blk->func!=func || !optimize_blockisreachable(opt, blk)) continue;
 
         for (instructionindx i=blk->start; i<=blk->end; i++) {
             _optimize_ipastepinstruction(state, opt->prog->code.data[i]);
