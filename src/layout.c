@@ -24,7 +24,14 @@ typedef struct {
     varray_instruction out;
     dictionary outtables;
     dictionary map;
+    dictionary ostartmap;
 } blockcomposer;
+
+/** Build a lookup table from original block starts to source graph block indices. */
+static void blockcomposer_buildostartmap(blockcomposer *comp) {
+    for (blockindx i=0; i<comp->graph->count; i++)
+        dictionary_insert(&comp->ostartmap, MORPHO_INTEGER(comp->graph->data[i].ostart), MORPHO_INTEGER(i));
+}
 
 /** Initialize composer structure */
 void blockcomposer_init(blockcomposer *comp, program *in, cfgraph *graph) {
@@ -35,6 +42,8 @@ void blockcomposer_init(blockcomposer *comp, program *in, cfgraph *graph) {
     varray_instructioninit(&comp->out);
     dictionary_init(&comp->outtables);
     dictionary_init(&comp->map);
+    dictionary_init(&comp->ostartmap);
+    blockcomposer_buildostartmap(comp);
 }
 
 /** Clear composer structure */
@@ -43,6 +52,7 @@ void blockcomposer_clear(blockcomposer *comp) {
     varray_instructionclear(&comp->out);
     dictionary_clear(&comp->outtables);
     dictionary_clear(&comp->map);
+    dictionary_clear(&comp->ostartmap);
 }
 
 /** Retrieve instruction at a given index */
@@ -152,19 +162,17 @@ void blockcomposer_fixbranch(blockcomposer *comp, blockindx i) {
 
 /** Maps an instruction indx that starts a block in the original source to a new instruction */
 bool _mapblockostart(blockcomposer *comp, instructionindx old, instructionindx *new) {
-    bool success=false;
-    instructionindx blkindx;
+    value oldmapped, newmapped;
     block *dest;
-    value mapped;
-    if (cfgraph_findblockostart(comp->graph, old, &dest) && // Find block in old cfgraph
-        cfgraph_findindx(comp->graph, dest, &blkindx) && // Retrieve the index
-        dictionary_get(&comp->map, MORPHO_INTEGER(blkindx), &mapped) &&
-        MORPHO_ISINTEGER(mapped) &&
-        cfgraph_indx(&comp->outgraph, MORPHO_GETINTEGERVALUE(mapped), &dest)) { // Find the corresponding block in the new cfgraph
-        *new = dest->start;
-        success=true;
-    }
-    return success;
+
+    if (!(dictionary_get(&comp->ostartmap, MORPHO_INTEGER(old), &oldmapped) &&
+          MORPHO_ISINTEGER(oldmapped) &&
+          dictionary_get(&comp->map, oldmapped, &newmapped) &&
+          MORPHO_ISINTEGER(newmapped) &&
+          cfgraph_indx(&comp->outgraph, MORPHO_GETINTEGERVALUE(newmapped), &dest))) return false;
+
+    *new = dest->start;
+    return true;
 }
 
 /** Fixes a branch table */
