@@ -639,7 +639,6 @@ void optimize_insertinstructionswithrestart(optimizer *opt, int n, instruction *
     varray_instructionwrite(&opt->insertions, ENCODE_BYTE(OP_END));
     
     optimize_replaceinstruction(opt, ENCODE_LONG(restart ? OP_INSERT_RESTART : OP_INSERT, n, start));
-    opt->nchanged++;
 }
 
 /** Replaces the current instruction with LCT r, and a given constant */
