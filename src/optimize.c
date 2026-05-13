@@ -2381,6 +2381,147 @@ static bool optimize_applyrequirednregs(optimizer *opt) {
     return changed;
 }
 
+static void _optimize_recordmaxregister(registerindx r, void *ref) {
+    registerindx *maxreg = (registerindx *) ref;
+    if (r>*maxreg) *maxreg=r;
+}
+
+static void _optimize_markusedregister(registerindx r, void *ref) {
+    bool *used = (bool *) ref;
+    used[r] = true;
+}
+
+static registerindx _optimize_requiredinstructionregs(instruction instr) {
+    registerindx a = DECODE_A(instr);
+    int nargs = DECODE_B(instr), nopt = DECODE_C(instr);
+
+    switch (DECODE_OP(instr)) {
+        case OP_CALL:
+            return a + nargs + 2*nopt + 1;
+        case OP_INVOKE:
+        case OP_METHOD:
+            return a + nargs + 2*nopt + 2;
+        default:
+            return 0;
+    }
+}
+
+static instruction _optimize_remapinstruction(instruction instr, registerindx *map) {
+    instruction op = DECODE_OP(instr);
+    opcodeflags flags = opcode_getflags(op);
+    registerindx a = DECODE_A(instr), b = DECODE_B(instr), c = DECODE_C(instr);
+
+    switch (op) {
+        case OP_NOP:
+        case OP_END:
+        case OP_BREAK:
+            return instr;
+        case OP_INSERT:
+        case OP_INSERT_RESTART:
+            return instr;
+        case OP_B:
+        case OP_PUSHERR:
+        case OP_POPERR:
+            return ENCODE_LONG(op, DECODE_A(instr), DECODE_sBx(instr));
+        case OP_BIF:
+        case OP_BIFF:
+            return ENCODE_LONG(op, map[a], DECODE_sBx(instr));
+        case OP_LCT:
+        case OP_LGL:
+        case OP_SGL:
+            return ENCODE_LONG(op, map[a], DECODE_Bx(instr));
+        case OP_RETURN:
+            return (DECODE_A(instr)>0) ? ENCODE(op, DECODE_A(instr), map[DECODE_B(instr)], DECODE_C(instr)) : instr;
+        default:
+            if (flags & (OPCODE_OVERWRITES_A | OPCODE_USES_A)) a = map[a];
+            if (flags & (OPCODE_OVERWRITES_B | OPCODE_USES_B | OPCODE_USES_RANGEBC)) b = map[b];
+            if (flags & (OPCODE_USES_C | OPCODE_USES_RANGEBC)) c = map[c];
+            return ENCODE(op, a, b, c);
+    }
+}
+
+/** Conservatively shrink function frames, and densely remap registers when safe. */
+static void optimize_compactframes(optimizer *opt) {
+    dictionary seen;
+
+    dictionary_init(&seen);
+    for (int i=0; i<opt->graph.count; i++) {
+        block *blk = &opt->graph.data[i];
+        objectfunction *func = blk->func;
+        bool cancompact = true, canremap = true, changed = false;
+        registerindx oldnreg = func->nregs, newnreg = 0;
+        registerindx maxreg = 0;
+        registerindx requirednreg = func->nargs + 1;
+        bool used[oldnreg];
+        registerindx map[oldnreg];
+
+        if (!optimize_blockisreachable(opt, blk)) continue;
+        if (dictionary_get(&seen, MORPHO_OBJECT(func), NULL)) continue;
+        dictionary_insert(&seen, MORPHO_OBJECT(func), MORPHO_NIL);
+
+        for (registerindx r=0; r<oldnreg; r++) {
+            used[r] = false;
+            map[r] = REGISTER_UNALLOCATED;
+        }
+        for (registerindx r=0; r<=func->nargs && r<oldnreg; r++) used[r] = true; // Preserve the entry window r0...rN.
+
+        for (int j=0; j<opt->graph.count; j++) {
+            block *fblk = &opt->graph.data[j];
+            if (fblk->func!=func) continue;
+            if (!optimize_blockisreachable(opt, fblk)) {
+                cancompact=false;
+                canremap=false;
+                continue;
+            }
+
+            for (instructionindx pc=fblk->start; pc<=fblk->end; pc++) {
+                instruction instr = optimize_getinstructionat(opt, pc);
+                registerindx overwrites;
+                registerindx required = _optimize_requiredinstructionregs(instr);
+                opcodeflags flags = opcode_getflags(DECODE_OP(instr));
+
+                if (DECODE_OP(instr)==OP_CLOSURE) canremap=false;
+                if (flags & OPCODE_USES_RANGEBC) canremap=false;
+                opcode_usageforinstruction(fblk, instr, _optimize_markusedregister, used);
+                if (opcode_overwritesforinstruction(instr, &overwrites)) used[overwrites] = true;
+                if (required>requirednreg) requirednreg=required;
+            }
+        }
+
+        for (registerindx r=0; r<oldnreg; r++) {
+            if (used[r]) {
+                maxreg = r;
+                map[r] = newnreg;
+                if (map[r]!=r) changed = true;
+                newnreg++;
+            }
+        }
+
+        if (!cancompact) continue;
+
+        if (newnreg==0) newnreg = func->nargs+1;
+        if (requirednreg>newnreg) newnreg=requirednreg;
+
+        if (canremap && changed) {
+            for (int j=0; j<opt->graph.count; j++) {
+                block *fblk = &opt->graph.data[j];
+                if (fblk->func!=func || !optimize_blockisreachable(opt, fblk)) continue;
+
+                for (instructionindx pc=fblk->start; pc<=fblk->end; pc++) {
+                    optimize_replaceinstructionat(opt, pc, _optimize_remapinstruction(optimize_getinstructionat(opt, pc), map));
+                }
+            }
+        } else if (!canremap) {
+            newnreg = maxreg + 1;
+            if (requirednreg>newnreg) newnreg=requirednreg;
+        }
+
+        func->nregs = newnreg;
+    }
+
+    dictionary_clear(&seen);
+}
+
 /** Run an optimization pass */
 void optimize_pass(optimizer *opt, int n) {
     opt->pass=n;
@@ -2433,7 +2574,10 @@ bool optimize(program *in) {
     bool success=!optimize_checkerror(&opt);
     
     // Layout final code and repair associated data structures
-    if (success) layout(&opt);
+    if (success) {
+        optimize_compactframes(&opt);
+        layout(&opt);
+    }
     
     optimize_clear(&opt);
     
